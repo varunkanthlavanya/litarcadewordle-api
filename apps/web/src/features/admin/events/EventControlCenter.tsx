@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import type { EventApiRow, EventStats } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { StatusStepper } from "@/components/shared/StatusStepper";
+import { BackLink } from "@/components/shared/BackLink";
 import { Card, CardContent } from "@/components/ui/card";
 
 const NAV_CARDS = [
@@ -28,6 +29,7 @@ export function EventControlCenter() {
 
   return (
     <div>
+      <BackLink to="/admin/events" label="Back to Events" />
       <h1 className="mb-4 text-2xl font-bold">{event.name}</h1>
       <StatusStepper status={event.status} />
 

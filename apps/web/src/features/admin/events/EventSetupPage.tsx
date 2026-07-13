@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackLink } from "@/components/shared/BackLink";
 import { cn } from "@/lib/utils";
 
 interface ParsedCohort {
@@ -68,6 +69,7 @@ export function EventSetupPage() {
 
   return (
     <div>
+      <BackLink to="/admin/events" label="Back to Events" />
       <h1 className="mb-6 text-2xl font-bold">Create Event</h1>
       <form onSubmit={handleSubmit} className="grid gap-8 md:grid-cols-2">
         <section className="space-y-4">

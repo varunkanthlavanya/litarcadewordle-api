@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BackLink } from "@/components/shared/BackLink";
 
 export function PlayerLogin() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -30,6 +31,9 @@ export function PlayerLogin() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-10">
       <div className="flex w-full max-w-sm flex-col items-center">
+        <div className="mb-3 self-start">
+          <BackLink to="/" label="Back to home" />
+        </div>
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-extrabold text-primary-foreground">
           L
         </div>

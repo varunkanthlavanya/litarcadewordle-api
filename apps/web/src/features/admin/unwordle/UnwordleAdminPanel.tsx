@@ -6,6 +6,7 @@ import { emitWithAck, getAdminSocket, waitForConnection } from "@/lib/socketClie
 import { useAdminLiveRefresh } from "@/hooks/useAdminLiveRefresh";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { BackLink } from "@/components/shared/BackLink";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
@@ -73,6 +74,7 @@ export function UnwordleAdminPanel() {
 
   return (
     <div className="space-y-4">
+      <BackLink to={`/admin/events/${id}`} label="Back to Event Control Center" />
       <h1 className="text-2xl font-bold">Playoffs — UNWORDLE</h1>
 
       <UwPuzzleSetup eventId={id} puzzle={puzzle} onChanged={loadPuzzle} />

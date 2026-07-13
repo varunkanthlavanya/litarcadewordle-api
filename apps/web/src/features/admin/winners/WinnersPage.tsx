@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BackLink } from "@/components/shared/BackLink";
 import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ export function WinnersPage() {
 
   return (
     <div>
+      <BackLink to={`/admin/events/${eventId}`} label="Back to Event Control Center" />
       <h1 className="mb-6 text-2xl font-bold">Winners</h1>
       <div className="overflow-hidden rounded-lg border">
         <Table>

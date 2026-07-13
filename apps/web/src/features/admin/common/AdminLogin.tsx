@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BackLink } from "@/components/shared/BackLink";
 
 export function AdminLogin() {
   const [secretKey, setSecretKey] = useState("");
@@ -28,7 +29,10 @@ export function AdminLogin() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 p-4">
+      <div className="mb-2 w-full max-w-sm">
+        <BackLink to="/" label="Back to home" />
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Admin Console</CardTitle>

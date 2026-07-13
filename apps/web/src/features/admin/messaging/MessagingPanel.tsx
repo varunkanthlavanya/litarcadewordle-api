@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { BackLink } from "@/components/shared/BackLink";
 import {
   Select,
   SelectContent,
@@ -78,6 +79,7 @@ export function MessagingPanel() {
 
   return (
     <div>
+      <BackLink to={`/admin/events/${eventId}`} label="Back to Event Control Center" />
       <h1 className="mb-6 text-2xl font-bold">Messaging</h1>
       <div className="grid gap-8 md:grid-cols-2">
         <section className="space-y-4">

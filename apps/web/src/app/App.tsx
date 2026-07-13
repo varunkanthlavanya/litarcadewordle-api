@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Home } from "../features/home/Home";
 import { PlayerLogin } from "../features/player/auth/PlayerLogin";
 import { PlayerLayout } from "../features/player/PlayerLayout";
 import { WaitingLobby } from "../features/player/timed-wordle/WaitingLobby";
@@ -23,6 +24,7 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Home />} />
         <Route path="/play/:eventId" element={<PlayerLogin />} />
         <Route element={<PlayerLayout />}>
           <Route path="/play/:eventId/lobby" element={<WaitingLobby />} />
@@ -45,6 +47,8 @@ export function App() {
           <Route path="/admin/events/:eventId/winners" element={<WinnersPage />} />
           <Route path="/admin/events/:eventId/audit" element={<AuditLogPage />} />
         </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

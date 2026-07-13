@@ -38,7 +38,7 @@ npm run dev:web                           # http://localhost:5173
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Postgres connection string |
-| `ADMIN_SECRET_KEY` | Shared admin passphrase (defaults to `LITARCADEWORDLE07` per the product spec) |
+| `ADMIN_SECRET_KEY` | Shared admin passphrase — set this to your own secret, never commit the real value |
 | `CORS_ORIGIN` | Frontend origin, e.g. `http://localhost:5173` |
 | `PORT` | API port (default 4000) |
 | `EVENT_TIMEZONE` | Default event timezone (default `Asia/Kolkata`) |

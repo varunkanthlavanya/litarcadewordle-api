@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install && npm run build --workspace=apps/api
+    buildCommand: npm install --include=dev && npm run build --workspace=packages/shared-types && npm run build --workspace=apps/api
     startCommand: npm run start --workspace=apps/api
     envVars:
       - key: NODE_ENV

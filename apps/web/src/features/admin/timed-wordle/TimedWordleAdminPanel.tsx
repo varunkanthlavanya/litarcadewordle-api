@@ -6,7 +6,6 @@ import type {
   TimedWordleSessionMonitorEntry,
 } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
-import { emitWithAck, getAdminSocket, waitForConnection } from "@/lib/socketClient";
 import { useAdminLiveRefresh } from "@/hooks/useAdminLiveRefresh";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { BackLink } from "@/components/shared/BackLink";
@@ -77,9 +76,7 @@ export function TimedWordleAdminPanel() {
   async function endOne(eventPlayerId: number) {
     const row = sessions.find((s) => s.eventPlayerId === eventPlayerId);
     if (!row?.sessionId) return;
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:tw:session:end", { sessionId: row.sessionId });
+    await apiClient.post(`/admin/events/${id}/timed-wordle/session/end`, { sessionId: row.sessionId });
     loadSessions();
   }
 
@@ -87,27 +84,21 @@ export function TimedWordleAdminPanel() {
     const sessionIds = [...selected]
       .map((eventPlayerId) => sessions.find((s) => s.eventPlayerId === eventPlayerId)?.sessionId)
       .filter((v): v is number => v != null);
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:tw:session:bulkEnd", { sessionIds });
+    await apiClient.post(`/admin/events/${id}/timed-wordle/session/bulkEnd`, { sessionIds });
     setSelected(new Set());
     loadSessions();
   }
 
   async function endAll() {
     const sessionIds = sessions.map((s) => s.sessionId).filter((v): v is number => v != null && v !== undefined);
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:tw:session:bulkEnd", { sessionIds });
+    await apiClient.post(`/admin/events/${id}/timed-wordle/session/bulkEnd`, { sessionIds });
     loadSessions();
   }
 
   async function adjustClock(eventPlayerId: number, deltaSeconds: number, scope: "GLOBAL" | "CURRENT_TRY") {
     const row = sessions.find((s) => s.eventPlayerId === eventPlayerId);
     if (!row?.sessionId) return;
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:tw:clock:adjust", { sessionId: row.sessionId, deltaSeconds, scope });
+    await apiClient.post(`/admin/events/${id}/timed-wordle/clock/adjust`, { sessionId: row.sessionId, deltaSeconds, scope });
     loadSessions();
   }
 

@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Lock } from "lucide-react";
 import type { UnwordleRoundStatusDto } from "@litarcadewordle/shared-types";
-import { emitWithAck, getPlayerSocket, waitForConnection } from "@/lib/socketClient";
+import { apiClient } from "@/lib/apiClient";
 import { Badge } from "@/components/ui/badge";
+
+// UNWORDLE has no per-try deadline to schedule against (only an admin-driven
+// start/stop), so a plain interval poll is the simplest correct replacement
+// for the old "uw:session:started" Socket.IO push.
+const POLL_MS = 3000;
 
 export function UnwordleLobby() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -12,34 +17,26 @@ export function UnwordleLobby() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = getPlayerSocket();
+    let cancelled = false;
 
-    function onStarted() {
-      navigate(`/play/${eventId}/unwordle/game`, { replace: true });
+    function poll() {
+      apiClient
+        .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
+        .then((res) => {
+          if (!cancelled) setStatus(res);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setError(err.message);
+        });
     }
-    socket.on("uw:session:started", onStarted);
 
-    waitForConnection(socket)
-      .then(() =>
-        emitWithAck<{ eventId: number }, { ok: boolean; error?: string; status?: UnwordleRoundStatusDto }>(
-          socket,
-          "uw:game:join",
-          { eventId: Number(eventId) }
-        )
-      )
-      .then((res) => {
-        if (!res.ok || !res.status) {
-          setError(res.error ?? "Could not load your Playoffs status");
-          return;
-        }
-        setStatus(res.status);
-      })
-      .catch((err: Error) => setError(err.message));
-
+    poll();
+    const interval = setInterval(poll, POLL_MS);
     return () => {
-      socket.off("uw:session:started", onStarted);
+      cancelled = true;
+      clearInterval(interval);
     };
-  }, [eventId, navigate]);
+  }, [eventId]);
 
   useEffect(() => {
     if (!status) return;

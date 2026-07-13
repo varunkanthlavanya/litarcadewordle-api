@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { TileColor, UnwordleLeaderboardEntry, UnwordleSessionMonitorEntry } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
-import { emitWithAck, getAdminSocket, waitForConnection } from "@/lib/socketClient";
 import { useAdminLiveRefresh } from "@/hooks/useAdminLiveRefresh";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -52,23 +51,17 @@ export function UnwordleAdminPanel() {
   const { recentlyUpdated } = useAdminLiveRefresh(id, loadSessions);
 
   async function startSession(sessionId: number) {
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:uw:session:start", { eventId: id, sessionId });
+    await apiClient.post(`/admin/events/${id}/unwordle/session/start`, { sessionId });
     loadSessions();
   }
 
   async function endSession(sessionId: number) {
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:uw:session:end", { eventId: id, sessionId });
+    await apiClient.post(`/admin/events/${id}/unwordle/session/end`, { sessionId });
     loadSessions();
   }
 
   async function endAll() {
-    const socket = getAdminSocket();
-    await waitForConnection(socket);
-    await emitWithAck(socket, "admin:uw:session:endAll", { eventId: id });
+    await apiClient.post(`/admin/events/${id}/unwordle/session/endAll`, {});
     loadSessions();
   }
 

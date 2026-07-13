@@ -20,7 +20,7 @@ export function AdminLogin() {
     setSubmitting(true);
     try {
       await apiClient.post("/admin/auth/login", { secretKey, nameLabel });
-      navigate("/admin/dashboard");
+      navigate("/admin/events", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

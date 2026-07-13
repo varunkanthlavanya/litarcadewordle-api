@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type {
   TileColor,
   TimedWordleGameEndedPayload,
+  TimedWordleRoundStatusDto,
   TimedWordleStateDto,
   TimedWordleTryDto,
 } from "@litarcadewordle/shared-types";
-import { getPlayerSocket, emitWithAck, waitForConnection } from "@/lib/socketClient";
+import { apiClient } from "@/lib/apiClient";
 import { WordGrid } from "./WordGrid";
 import { Keyboard } from "./Keyboard";
 import { TimerHud } from "./TimerHud";
@@ -14,6 +15,12 @@ import { GameEndScreen } from "./GameEndScreen";
 
 const WORD_LENGTH = 5;
 const COLOR_RANK: Record<TileColor, number> = { GRAY: 0, YELLOW: 1, GREEN: 2 };
+// Deadlines are enforced server-side on every call anyway (see wl-timed-wordle's
+// lazy reconcile) — this is just how promptly the client notices a transition
+// it didn't cause itself (grace opening, a skip, global timeout), replacing
+// the old Socket.IO push. A little slop past the exact deadline is fine.
+const RECONCILE_BUFFER_MS = 250;
+const HEARTBEAT_MS = 15_000;
 
 function computeLetterStatus(tries: TimedWordleTryDto[]): Record<string, TileColor | undefined> {
   const status: Record<string, TileColor | undefined> = {};
@@ -38,79 +45,89 @@ export function TimedWordleGame() {
   const [error, setError] = useState<string | null>(null);
   const [gameEnded, setGameEnded] = useState<TimedWordleGameEndedPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleReconcile = useCallback((s: TimedWordleStateDto) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (s.status !== "IN_PROGRESS") return;
+    const nextTransitionAt = s.graceActive && s.graceDeadlineAt !== null ? s.graceDeadlineAt : s.currentTryDeadlineAt;
+    const target = Math.min(nextTransitionAt, s.globalDeadlineAt);
+    const delay = Math.max(target - Date.now(), 0) + RECONCILE_BUFFER_MS;
+    timerRef.current = setTimeout(() => void fetchFresh(), Math.min(delay, HEARTBEAT_MS));
+  }, []);
+
+  const loadEndedDetails = useCallback(async () => {
+    if (!eventId) return;
+    try {
+      const status = await apiClient.get<TimedWordleRoundStatusDto>(`/player/events/${eventId}/timed-wordle/status`);
+      if (status.result && status.sessionId !== null) {
+        setGameEnded({
+          sessionId: status.sessionId,
+          reason: status.result.reason,
+          secretWord: status.result.secretWord,
+          definition: status.result.definition,
+          summary: {
+            found: status.result.found,
+            cumulativeTimeMs: status.result.cumulativeTimeMs,
+            triesUsed: status.result.triesUsed,
+            tileScore: status.result.tileScore,
+          },
+        });
+      }
+    } catch {
+      // best-effort — the in-game state already reflects the terminal status either way
+    }
+  }, [eventId]);
+
+  const fetchFresh = useCallback(async () => {
+    if (!eventId) return;
+    try {
+      const res = await apiClient.post<{ sessionId: number; state: TimedWordleStateDto }>(
+        `/player/events/${eventId}/timed-wordle/game/start`,
+        {}
+      );
+      setLoading(false);
+      setSessionId(res.sessionId);
+      setState(res.state);
+      setCurrentGuess("");
+      if (res.state.status !== "IN_PROGRESS") {
+        void loadEndedDetails();
+      } else {
+        scheduleReconcile(res.state);
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Could not start the game");
+    }
+  }, [eventId, loadEndedDetails, scheduleReconcile]);
 
   useEffect(() => {
-    const socket = getPlayerSocket();
-    let cancelled = false;
-
-    waitForConnection(socket)
-      .then(() =>
-        emitWithAck<
-          { eventId: number },
-          { ok: boolean; error?: string; sessionId?: number; state?: TimedWordleStateDto }
-        >(socket, "tw:game:start", { eventId: Number(eventId) })
-      )
-      .then((res) => {
-        if (cancelled) return;
-        setLoading(false);
-        if (!res.ok || !res.state || res.sessionId === undefined) {
-          setError(res.error ?? "Could not start the game");
-          return;
-        }
-        setSessionId(res.sessionId);
-        setState(res.state);
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setLoading(false);
-        setError(err.message);
-      });
-
-    function onTryAdvance(payload: { tryNumber: number; skipped: boolean; tryDeadlineAt: number; bankedMs: number }) {
-      setState((prev) =>
-        prev
-          ? { ...prev, currentTryNumber: payload.tryNumber, currentTryDeadlineAt: payload.tryDeadlineAt, graceActive: false, graceDeadlineAt: null, bankedSurplusMs: payload.bankedMs }
-          : prev
-      );
-      setCurrentGuess("");
-    }
-
-    function onGraceOpened(payload: { graceDeadlineAt: number }) {
-      setState((prev) => (prev ? { ...prev, graceActive: true, graceDeadlineAt: payload.graceDeadlineAt } : prev));
-    }
-
-    function onGameEnded(payload: TimedWordleGameEndedPayload) {
-      setGameEnded(payload);
-    }
-
-    socket.on("tw:try:advance", onTryAdvance);
-    socket.on("tw:grace:opened", onGraceOpened);
-    socket.on("tw:game:ended", onGameEnded);
-
+    void fetchFresh();
     return () => {
-      cancelled = true;
-      socket.off("tw:try:advance", onTryAdvance);
-      socket.off("tw:grace:opened", onGraceOpened);
-      socket.off("tw:game:ended", onGameEnded);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   const submitGuess = useCallback(async () => {
     if (!sessionId || currentGuess.length !== WORD_LENGTH) return;
     setError(null);
-    const socket = getPlayerSocket();
-    const res = await emitWithAck<
-      { sessionId: number; guess: string },
-      { ok: boolean; error?: string; state?: TimedWordleStateDto }
-    >(socket, "tw:guess:submit", { sessionId, guess: currentGuess });
-
-    if (!res.ok) {
-      setError(res.error ?? "Could not submit guess");
-      return;
+    try {
+      const res = await apiClient.post<{ feedback: TileColor[]; state: TimedWordleStateDto }>(
+        `/player/events/${eventId}/timed-wordle/game/guess`,
+        { sessionId, guess: currentGuess }
+      );
+      setState(res.state);
+      setCurrentGuess("");
+      if (res.state.status !== "IN_PROGRESS") {
+        void loadEndedDetails();
+      } else {
+        scheduleReconcile(res.state);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not submit guess");
     }
-    if (res.state) setState(res.state);
-    setCurrentGuess("");
-  }, [sessionId, currentGuess]);
+  }, [sessionId, currentGuess, eventId, loadEndedDetails, scheduleReconcile]);
 
   const handleKey = useCallback((key: string) => {
     setCurrentGuess((g) => (g.length < WORD_LENGTH ? g + key : g));

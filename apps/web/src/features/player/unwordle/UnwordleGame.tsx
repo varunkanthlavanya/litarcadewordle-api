@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { UnwordleRoundStatusDto, UnwordleStateDto } from "@litarcadewordle/shared-types";
-import { emitWithAck, getPlayerSocket, waitForConnection } from "@/lib/socketClient";
+import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatHhMmSsFromElapsed, useStopwatch } from "@/hooks/useStopwatch";
@@ -13,6 +13,11 @@ const FAILED_TILE_MESSAGES: Record<string, string> = {
   YELLOW_LETTER_IN_SAME_POSITION: "That letter can't go in that exact position",
   GRAY_LETTER_IS_IN_SOLUTION: "That letter is actually in the solution",
 };
+
+// Only used to notice an admin-initiated end mid-game (no per-try deadline
+// exists here to schedule against, unlike Timed Wordle) — replaces the old
+// "uw:session:ended" Socket.IO push.
+const POLL_MS = 3000;
 
 export function UnwordleGame() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -26,39 +31,39 @@ export function UnwordleGame() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const socket = getPlayerSocket();
+    let cancelled = false;
 
-    function onEnded() {
-      navigate(`/play/${eventId}/unwordle/results`, { replace: true });
-    }
-    socket.on("uw:session:ended", onEnded);
-
-    waitForConnection(socket)
-      .then(() =>
-        emitWithAck<{ eventId: number }, { ok: boolean; error?: string; status?: UnwordleRoundStatusDto }>(
-          socket,
-          "uw:game:join",
-          { eventId: Number(eventId) }
-        )
-      )
+    apiClient
+      .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
       .then((res) => {
-        if (!res.ok || !res.status) {
-          setLoadError(res.error ?? "Could not load the game");
-          return;
-        }
-        if (res.status.sessionStatus !== "IN_PROGRESS" || !res.status.state || !res.status.sessionId) {
+        if (cancelled) return;
+        if (res.sessionStatus !== "IN_PROGRESS" || !res.state || !res.sessionId) {
           navigate(`/play/${eventId}/unwordle/lobby`, { replace: true });
           return;
         }
-        setSessionId(res.status.sessionId);
-        setState(res.status.state);
-        const firstUnsolved = res.status.state.rows.findIndex((r) => !r.solved);
+        setSessionId(res.sessionId);
+        setState(res.state);
+        const firstUnsolved = res.state.rows.findIndex((r) => !r.solved);
         if (firstUnsolved >= 0) setSelectedRow(firstUnsolved);
       })
-      .catch((err: Error) => setLoadError(err.message));
+      .catch((err: Error) => {
+        if (!cancelled) setLoadError(err.message);
+      });
+
+    const interval = setInterval(() => {
+      apiClient
+        .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
+        .then((res) => {
+          if (!cancelled && res.sessionStatus !== "IN_PROGRESS") {
+            navigate(`/play/${eventId}/unwordle/results`, { replace: true });
+          }
+        })
+        .catch(() => {});
+    }, POLL_MS);
 
     return () => {
-      socket.off("uw:session:ended", onEnded);
+      cancelled = true;
+      clearInterval(interval);
     };
   }, [eventId, navigate]);
 
@@ -71,16 +76,10 @@ export function UnwordleGame() {
     setSubmitting(true);
     setRejection(null);
     try {
-      const socket = getPlayerSocket();
-      const res = await emitWithAck<
-        { eventId: number; sessionId: number; rowIndex: number; guess: string },
-        { ok: boolean; error?: string; outcome?: { kind: string; failedTiles?: Array<{ reason: string }>; puzzleCompleted?: boolean } }
-      >(socket, "uw:row:submit", { eventId: Number(eventId), sessionId, rowIndex: selectedRow, guess });
-
-      if (!res.ok || !res.outcome) {
-        setRejection(res.error ?? "Could not submit");
-        return;
-      }
+      const res = await apiClient.post<{
+        outcome: { kind: string; failedTiles?: Array<{ reason: string }>; puzzleCompleted?: boolean };
+        state: UnwordleStateDto;
+      }>(`/player/events/${eventId}/unwordle/row/submit`, { sessionId, rowIndex: selectedRow, guess });
 
       if (res.outcome.kind === "REJECTED_INVALID_WORD") {
         setRejection("Not a valid word — try again");
@@ -94,19 +93,17 @@ export function UnwordleGame() {
 
       // ACCEPTED
       setGuess("");
-      if (!state) return;
-      const rows = state.rows.map((r, i) =>
-        i === selectedRow ? { ...r, solved: true, solvedWord: guess.toUpperCase() } : r
-      );
-      setState({ ...state, rows, rowsSolvedCount: rows.filter((r) => r.solved).length });
+      setState(res.state);
 
       if (res.outcome.puzzleCompleted) {
         navigate(`/play/${eventId}/unwordle/results`, { replace: true });
         return;
       }
 
-      const nextUnsolved = rows.findIndex((r) => !r.solved);
+      const nextUnsolved = res.state.rows.findIndex((r) => !r.solved);
       if (nextUnsolved >= 0) setSelectedRow(nextUnsolved);
+    } catch (err) {
+      setRejection(err instanceof Error ? err.message : "Could not submit");
     } finally {
       setSubmitting(false);
     }

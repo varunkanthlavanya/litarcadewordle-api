@@ -6,61 +6,81 @@ The full product spec lives in [design/DESIGN_BRIEF.md](design/DESIGN_BRIEF.md) 
 
 ## Status
 
-Every screen in the design brief is implemented and wired to real backend logic — both games are fully playable end-to-end, and the full admin console (event management, live session monitoring, messaging, the Prelims→Playoffs cutoff tool, puzzle authoring, winners, audit log) is built. 69 backend unit tests cover both games' engines against the PRDs' own worked examples and acceptance tables.
+Every screen in the design brief is implemented and wired to real backend logic — both games are fully playable end-to-end, and the full admin console (event management, live session monitoring, messaging, the Prelims→Playoffs cutoff tool, puzzle authoring, winners, audit log) is built.
 
 **Not yet done, called out explicitly so nothing here is assumed silently:**
-- **No live database has been run against this code.** The sandbox this was built in has no Postgres available, so every route/service has been verified via unit tests, type-checking, and graceful-error-path browser checks (a DB outage returns a clean 500, never a crash or a hang) — but no migration has actually been executed, and no full create-event → play → advance → play → winners flow has been run against real data. **Run the migrations and do one full walkthrough before treating this as production-ready** (see Verification below).
-- Concurrency/load testing at the target 600-concurrent-session scale hasn't been run.
-- Definitions for the Timed Wordle reveal screen are admin-authored at puzzle-creation time, not fetched from an external dictionary API (kept deliberately — avoids a runtime dependency and matches the original architecture plan's "no external API at runtime" decision).
-- There's no cross-linking yet from a Timed Wordle results screen to the UNWORDLE lobby for players who've advanced — they navigate there via the notification/URL directly. Small, easy follow-up if wanted.
-- A few older modules (`events`, `admin auth`) return raw snake_case Postgres rows straight over the wire rather than camelCase DTOs like the newer game modules do — functionally fine (the frontend types match reality exactly), just an inconsistency worth normalizing at some point if the API's shape needs to stabilize for other consumers.
+- **No live database has been run against this code yet.** Every route has been verified by careful manual review against the original (previously-tested) Express implementation this was ported from, and by type-checking, but no migration has actually been executed against a real Supabase project. **Run the migrations and do one full walkthrough before treating this as production-ready** (see Verification below).
+- Concurrency/load testing at the target 600-concurrent-session scale hasn't been run — see the design note on this below for why it should hold up, but that's a claim to verify, not a guarantee.
+- Definitions for the Timed Wordle reveal screen are admin-authored at puzzle-creation time, not fetched from an external dictionary API (kept deliberately — avoids a runtime dependency).
+- A few "online now" / "delivery status" admin-facing indicators are approximated via recent activity timestamps rather than true live presence, since there's no persistent server holding open connections anymore (see Architecture below) — this only affects a couple of cosmetic badges, not gameplay or data correctness.
 
 ## Architecture
 
-- `apps/api` — Express + Socket.IO backend (Node/TypeScript)
 - `apps/web` — React + Vite + Tailwind + shadcn/ui frontend
-- `packages/shared-types` — TypeScript types shared by both (socket payloads, DTOs, enums)
+- `apps/web/supabase/migrations` — Postgres schema (every table/type prefixed `wl_` so it can't collide with anything else in a shared Supabase project)
+- `apps/web/supabase/functions` — Supabase Edge Functions (Deno) — this is the backend. One function per module (`wl-admin-auth`, `wl-player-auth`, `wl-events`, `wl-timed-wordle`, `wl-unwordle`, `wl-cutoff`, `wl-winners`, `wl-audit`, `wl-notifications`), plus `wl-sweep` (a cron-invoked safety net, see below). `apps/web/supabase/functions/_shared` holds the pure game-logic files (state machines, scoring, validation) ported essentially unchanged from the original design, plus shared auth/CORS/token helpers.
+- `packages/shared-types` — TypeScript types shared across the frontend (DTOs, enums)
 
-The Timed Wordle timer is **server-authoritative**: a single in-process scan loop (`apps/api/src/modules/timed-wordle/engine/timerScheduler.ts`) drives every active session's try/grace/global-clock transitions and persists them to Postgres on every change, so a redeploy mid-event recovers in-flight games from the database rather than losing them. No Redis is used — see the architecture notes in the original implementation plan for when that would become necessary (horizontal scaling across multiple Node instances).
+This intentionally has **no persistent Node process** — it runs entirely on Supabase (Postgres + Edge Functions), which is what makes it hostable inside a Lovable Cloud project alongside other, unrelated functionality.
+
+### Timed Wordle's timer, without a persistent server
+
+The original design used a single in-process 500ms scan loop to proactively fire timer transitions (try → grace → skip, global timeout). Supabase Edge Functions have no equivalent persistent process, so this became:
+
+1. **Lazy reconcile-on-read**: every call that touches a Timed Wordle session first checks stored deadlines against `now()` and applies any due transitions (`apps/web/supabase/functions/_shared/timedWordle/repo.ts`'s `loadAndReconcile`) before returning fresh state — the same transition logic as before, just invoked synchronously instead of on a loop.
+2. **Event-driven client timers, not polling**: the player's browser already knows its own next deadline (it's in the state it was just given), so instead of polling on a fixed interval, it schedules exactly one `setTimeout` for the moment that deadline elapses and calls back in then — this keeps request volume low even at 600 concurrent players, since most of the time nothing is due yet.
+3. **`wl-sweep` cron job** (see the pg_cron migration) reconciles every `IN_PROGRESS` session once a minute — a safety net for sessions nobody is actively polling (an abandoned tab), not the primary correctness mechanism.
+
+UNWORDLE has no per-try timer at all (just an admin-driven start/stop stopwatch), so it needed none of this — just plain read-mutate-write per action, with a short interval poll on the player side to notice an admin-initiated start/end.
+
+Optimistic concurrency (a `row_version` column, checked-and-incremented on every session write) replaces holding open a database transaction across a request — appropriate here since a given session realistically only has one real writer at a time (its own player, plus the occasional reconcile).
+
+Admin dashboards poll every ~5 seconds instead of receiving Socket.IO pushes — the UI was already fully-refetch-on-update rather than diff-patched, so this reads identically, just interval-driven instead of event-driven.
 
 ## Running locally
 
 ```bash
 npm install
-cp apps/api/.env.example apps/api/.env   # then fill in DATABASE_URL — see below
-npm run migrate:up                        # apply all Postgres migrations
-npm run dev:api                           # http://localhost:4000
-npm run dev:web                           # http://localhost:5173
+npm run dev:web       # http://localhost:5173
 ```
 
-### Environment variables (`apps/api/.env`)
+The frontend talks directly to Supabase Edge Functions — there's no separate local API server to run. To exercise the backend locally you need the [Supabase CLI](https://supabase.com/docs/guides/cli) and Docker:
+
+```bash
+supabase start                 # local Postgres + Edge Functions runtime
+supabase db reset              # applies every migration in apps/web/supabase/migrations
+supabase functions serve       # serves every function in apps/web/supabase/functions
+```
+
+### Environment variables (`apps/web/.env`)
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Postgres connection string |
-| `ADMIN_SECRET_KEY` | Shared admin passphrase — set this to your own secret, never commit the real value |
-| `CORS_ORIGIN` | Frontend origin, e.g. `http://localhost:5173` |
-| `PORT` | API port (default 4000) |
+| `VITE_SUPABASE_URL` | Your Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Your Supabase project's anon/publishable key |
+
+### Edge Function secrets (set via `supabase secrets set` or the Supabase dashboard)
+
+| Secret | Purpose |
+|---|---|
+| `ADMIN_SECRET_KEY` | Shared admin passphrase — never commit the real value |
+| `CORS_ORIGIN` | Comma-separated allowed origins, e.g. `https://your-app.lovable.app,https://preview--your-app.lovable.app` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Auto-provided by Supabase inside every Edge Function — no action needed |
+| `CRON_SECRET` | A separate, randomly-generated secret (NOT the service-role key) that authorizes the `wl-sweep` cron job — see the pg_cron migration's comments for setup |
+| `ADMIN_SESSION_TTL_HOURS` / `PLAYER_SESSION_TTL_HOURS` | Session lengths (default 12 / 6) |
 | `EVENT_TIMEZONE` | Default event timezone (default `Asia/Kolkata`) |
 
-## Connecting this to Lovable / Supabase
+## Connecting this to Lovable Cloud
 
-Lovable projects run on Supabase under the hood, which is plain Postgres — this backend's `pg`-based data layer works against it unchanged. To wire it up:
-
-1. In the Supabase dashboard for your Lovable project: **Project Settings → Database → Connection string** (use the direct connection, not the pooler, since `node-pg-migrate` needs a stable session for DDL).
-2. Put that string in `apps/api/.env` as `DATABASE_URL`, then run `npm run migrate:up`.
-3. **The Node/Socket.IO service itself needs to run somewhere that supports long-running processes** (Render, Railway, Fly.io, a small VPS) — Lovable hosts the frontend + Supabase, not arbitrary backend servers, since the timer scheduler and websocket connections need a persistent process. Point `apps/web`'s `VITE_API_BASE_URL` at wherever that ends up.
-4. `apps/web` can be imported into Lovable as-is (it's a standard Vite + Tailwind + shadcn/ui app) for further design iteration there, pointed at the separately-hosted API.
+1. Push `apps/web/supabase/migrations` and `apps/web/supabase/functions` to the repo your Lovable project syncs with — Lovable's own GitHub integration picks up schema/function changes from there.
+2. Set every secret in the table above via the Supabase dashboard for that project (Project Settings → Edge Functions → Secrets).
+3. Fill in the two placeholders in the `wl_sweep_cron` migration (your project ref and a freshly-generated `CRON_SECRET`) before it runs.
+4. `apps/web` itself needs no separate hosting step beyond what Lovable already does for the rest of the project — there's no standalone backend to deploy anywhere else.
 
 ## Verification
 
-```bash
-npm run test:api    # 69 unit tests — both game engines against the PRDs' worked examples
-npm run build:api
-npm run build:web
-```
-
 Before calling this event-ready:
-1. Run migrations against a real Postgres instance.
+1. Run the migrations against a real Supabase project (local `supabase start` first, then the real one).
 2. Full manual walkthrough: create an event → upload a cohort → open Prelims → play a Timed Wordle game to completion (force a grace/skip and a Try-6 time-bank scenario) → use the Cutoff Tool to advance players → create + publish an UNWORDLE puzzle → start/play/end a Playoffs session → mark winners → check the audit log recorded everything.
-3. Load-test at or near 600 concurrent simulated players.
+3. Confirm the admin secret key works end-to-end via the real login form, not just as a stored Edge Function secret.
+4. Load-test a burst of ≥600 simultaneous requests against `wl-timed-wordle` (k6/artillery) and confirm no Postgres connection-limit errors — the design above is intended to hold up at this scale, but that's a claim to verify, not assume.

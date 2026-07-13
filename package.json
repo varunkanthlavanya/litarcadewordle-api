@@ -7,13 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
-    "build:api": "npm run build --workspace=apps/api",
-    "build:web": "npm run build --workspace=apps/web",
-    "test:api": "npm run test --workspace=apps/api",
-    "migrate:up": "npm run migrate:up --workspace=apps/api",
-    "migrate:down": "npm run migrate:down --workspace=apps/api",
-    "check:words": "npm run check:words --workspace=apps/api"
+    "build:web": "npm run build --workspace=apps/web"
   }
 }

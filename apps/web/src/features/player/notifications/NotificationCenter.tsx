@@ -1,34 +1,41 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NotificationDto } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
-import { getPlayerSocket } from "@/lib/socketClient";
 import { NotificationToast } from "@/components/shared/NotificationToast";
+
+// Replaces the old "notification:push" Socket.IO event — a notification
+// being a few seconds late to appear is unnoticeable in practice, so a
+// plain interval poll is a reasonable, much simpler replacement here.
+const POLL_MS = 10_000;
 
 function metaFor(n: NotificationDto): string {
   return n.type === "ADVANCED" ? "Prelims result" : "From admin";
 }
 
-/** Shows live pushes while connected, and re-surfaces anything the player missed
- * while disconnected — fetched once on mount from the persisted notifications list. */
+/** Shows unread notifications, polling the persisted list so anything sent
+ * while this tab wasn't open still surfaces once it is. */
 export function NotificationCenter() {
   const [queue, setQueue] = useState<NotificationDto[]>([]);
+  const seenIds = useRef<Set<number>>(new Set());
 
   useEffect(() => {
-    apiClient
-      .get<NotificationDto[]>("/player/notifications")
-      .then((all) => setQueue(all.filter((n) => !n.readAt)))
-      .catch(() => {
-        // best-effort — a missing/stale token here shouldn't block the page itself
-      });
-
-    const socket = getPlayerSocket();
-    function onPush(payload: NotificationDto) {
-      setQueue((prev) => [payload, ...prev]);
+    function poll() {
+      apiClient
+        .get<NotificationDto[]>("/player/notifications")
+        .then((all) => {
+          const unread = all.filter((n) => !n.readAt && !seenIds.current.has(n.id));
+          if (unread.length === 0) return;
+          unread.forEach((n) => seenIds.current.add(n.id));
+          setQueue((prev) => [...unread, ...prev]);
+        })
+        .catch(() => {
+          // best-effort — a missing/stale token here shouldn't block the page itself
+        });
     }
-    socket.on("notification:push", onPush);
-    return () => {
-      socket.off("notification:push", onPush);
-    };
+
+    poll();
+    const interval = setInterval(poll, POLL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   function dismiss(id: number) {

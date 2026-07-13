@@ -15,7 +15,7 @@ export function createSocketServer(httpServer: HttpServer): {
   notificationsService: NotificationsService;
 } {
   const io = new Server(httpServer, {
-    cors: { origin: config.corsOrigin, credentials: true },
+    cors: { origin: config.corsOrigins, credentials: true },
   });
 
   const playerNsp = registerPlayerNamespace(io);

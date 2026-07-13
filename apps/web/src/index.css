@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0.975 0.008 80;
+    --foreground: 0.22 0.02 65;
+
+    --card: 0.995 0.004 85;
+    --card-foreground: 0.22 0.02 65;
+
+    --popover: 0.995 0.004 85;
+    --popover-foreground: 0.22 0.02 65;
+
+    --primary: 0.53 0.15 43;
+    --primary-foreground: 0.99 0.005 80;
+
+    --secondary: 0.91 0.02 75;
+    --secondary-foreground: 0.22 0.02 65;
+
+    --muted: 0.95 0.01 75;
+    --muted-foreground: 0.5 0.02 65;
+
+    --accent: 0.74 0.13 85;
+    --accent-foreground: 0.22 0.02 65;
+
+    --destructive: 0.55 0.19 25;
+    --destructive-foreground: 0.99 0.005 80;
+    --destructive-subtle: 0.94 0.05 25;
+
+    --success: 0.56 0.13 148;
+    --success-foreground: 0.99 0.005 80;
+    --success-subtle: 0.93 0.05 148;
+
+    --warning: 0.68 0.15 65;
+    --warning-foreground: 0.22 0.02 65;
+    --warning-subtle: 0.94 0.06 75;
+
+    --info: 0.55 0.14 250;
+    --info-foreground: 0.99 0.005 80;
+    --info-subtle: 0.91 0.04 250;
+
+    --offline: 0.68 0.01 70;
+    --offline-foreground: 0.22 0.02 65;
+    --offline-subtle: 0.9 0.006 70;
+
+    --border: 0.87 0.016 70;
+    --input: 0.87 0.016 70;
+    --ring: 0.53 0.15 43;
+
+    --tile-green: 0.58 0.13 145;
+    --tile-yellow: 0.78 0.14 95;
+    --tile-gray: 0.62 0.012 70;
+    --tile-empty-border: 0.85 0.015 70;
+
+    --tile-skipped-a: 0.9 0.012 70;
+    --tile-skipped-b: 0.855 0.015 70;
+    --tile-skipped-border: 0.68 0.018 70;
+    --tile-skipped-text: 0.46 0.02 70;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 0.16 0.014 70;
+    --foreground: 0.94 0.01 75;
+
+    --card: 0.2 0.016 68;
+    --card-foreground: 0.94 0.01 75;
+
+    --popover: 0.2 0.016 68;
+    --popover-foreground: 0.94 0.01 75;
+
+    --primary: 0.62 0.15 43;
+    --primary-foreground: 0.14 0.02 65;
+
+    --secondary: 0.27 0.02 70;
+    --secondary-foreground: 0.94 0.01 75;
+
+    --muted: 0.24 0.016 70;
+    --muted-foreground: 0.68 0.015 70;
+
+    --accent: 0.74 0.13 85;
+    --accent-foreground: 0.16 0.02 65;
+
+    --destructive: 0.62 0.19 25;
+    --destructive-foreground: 0.97 0.01 80;
+    --destructive-subtle: 0.28 0.05 25;
+
+    --success: 0.62 0.13 148;
+    --success-foreground: 0.14 0.02 65;
+    --success-subtle: 0.27 0.05 148;
+
+    --warning: 0.7 0.15 65;
+    --warning-foreground: 0.16 0.02 65;
+    --warning-subtle: 0.28 0.06 75;
+
+    --info: 0.62 0.14 250;
+    --info-foreground: 0.97 0.01 80;
+    --info-subtle: 0.26 0.05 250;
+
+    --offline: 0.55 0.01 70;
+    --offline-foreground: 0.94 0.01 75;
+    --offline-subtle: 0.26 0.01 70;
+
+    --border: 0.3 0.018 68;
+    --input: 0.3 0.018 68;
+    --ring: 0.62 0.15 43;
+
+    --tile-green: 0.55 0.13 145;
+    --tile-yellow: 0.72 0.14 95;
+    --tile-gray: 0.45 0.012 70;
+    --tile-empty-border: 0.32 0.015 70;
+
+    --tile-skipped-a: 0.26 0.014 70;
+    --tile-skipped-b: 0.23 0.016 70;
+    --tile-skipped-border: 0.42 0.018 70;
+    --tile-skipped-text: 0.62 0.015 70;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@layer components {
+  /* Skipped-try tile (PRD open item, resolved by design brief): hatched fill +
+     dashed border, distinct from both empty (plain outline) and played (solid fill) tiles. */
+  .tile-skipped {
+    background-image: repeating-linear-gradient(
+      135deg,
+      oklch(var(--tile-skipped-a)) 0 6px,
+      oklch(var(--tile-skipped-b)) 6px 12px
+    );
+    border: 2px dashed oklch(var(--tile-skipped-border));
+    color: oklch(var(--tile-skipped-text));
+  }
+
+  .row-flash {
+    animation: row-flash 800ms ease-out;
+  }
+}

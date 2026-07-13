@@ -1,0 +1,51 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { PlayerLogin } from "../features/player/auth/PlayerLogin";
+import { PlayerLayout } from "../features/player/PlayerLayout";
+import { WaitingLobby } from "../features/player/timed-wordle/WaitingLobby";
+import { TimedWordleGame } from "../features/player/timed-wordle/TimedWordleGame";
+import { TimedWordleResultsPage } from "../features/player/timed-wordle/TimedWordleResultsPage";
+import { UnwordleLobby } from "../features/player/unwordle/UnwordleLobby";
+import { UnwordleGame } from "../features/player/unwordle/UnwordleGame";
+import { UnwordleResults } from "../features/player/unwordle/UnwordleResults";
+import { AdminLogin } from "../features/admin/common/AdminLogin";
+import { AdminLayout } from "../features/admin/common/AdminLayout";
+import { EventsListPage } from "../features/admin/events/EventsListPage";
+import { EventSetupPage } from "../features/admin/events/EventSetupPage";
+import { EventControlCenter } from "../features/admin/events/EventControlCenter";
+import { TimedWordleAdminPanel } from "../features/admin/timed-wordle/TimedWordleAdminPanel";
+import { MessagingPanel } from "../features/admin/messaging/MessagingPanel";
+import { CutoffToolPage } from "../features/admin/cutoff/CutoffToolPage";
+import { UnwordleAdminPanel } from "../features/admin/unwordle/UnwordleAdminPanel";
+import { WinnersPage } from "../features/admin/winners/WinnersPage";
+import { AuditLogPage } from "../features/admin/audit/AuditLogPage";
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/play/:eventId" element={<PlayerLogin />} />
+        <Route element={<PlayerLayout />}>
+          <Route path="/play/:eventId/lobby" element={<WaitingLobby />} />
+          <Route path="/play/:eventId/game" element={<TimedWordleGame />} />
+          <Route path="/play/:eventId/results" element={<TimedWordleResultsPage />} />
+          <Route path="/play/:eventId/unwordle/lobby" element={<UnwordleLobby />} />
+          <Route path="/play/:eventId/unwordle/game" element={<UnwordleGame />} />
+          <Route path="/play/:eventId/unwordle/results" element={<UnwordleResults />} />
+        </Route>
+
+        <Route path="/admin" element={<AdminLogin />} />
+        <Route element={<AdminLayout />}>
+          <Route path="/admin/events" element={<EventsListPage />} />
+          <Route path="/admin/events/new" element={<EventSetupPage />} />
+          <Route path="/admin/events/:eventId" element={<EventControlCenter />} />
+          <Route path="/admin/events/:eventId/prelims" element={<TimedWordleAdminPanel />} />
+          <Route path="/admin/events/:eventId/messages" element={<MessagingPanel />} />
+          <Route path="/admin/events/:eventId/cutoff" element={<CutoffToolPage />} />
+          <Route path="/admin/events/:eventId/playoffs" element={<UnwordleAdminPanel />} />
+          <Route path="/admin/events/:eventId/winners" element={<WinnersPage />} />
+          <Route path="/admin/events/:eventId/audit" element={<AuditLogPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}

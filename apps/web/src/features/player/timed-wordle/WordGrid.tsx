@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { WordleTile } from "@/components/shared/WordleTile";
 import type { TileColor, TimedWordleTryDto } from "@litarcadewordle/shared-types";
 
@@ -13,15 +14,21 @@ const COLOR_TO_STATE: Record<TileColor, "correct" | "present" | "absent"> = {
 interface WordGridProps {
   tries: TimedWordleTryDto[];
   currentGuess: string;
+  /** Briefly shakes the in-progress row — mirrors real Wordle's feedback for
+   * submitting too few letters. */
+  shakeCurrentRow?: boolean;
 }
 
-export function WordGrid({ tries, currentGuess }: WordGridProps) {
+export function WordGrid({ tries, currentGuess, shakeCurrentRow }: WordGridProps) {
   const rows = Array.from({ length: MAX_TRIES }, (_, rowIndex) => {
     const resolvedTry = tries[rowIndex];
     const isCurrentRow = rowIndex === tries.length;
 
     return (
-      <div key={rowIndex} className="grid grid-cols-5 gap-1.5">
+      <div
+        key={rowIndex}
+        className={cn("grid grid-cols-5 gap-1.5", isCurrentRow && shakeCurrentRow && "animate-shake")}
+      >
         {Array.from({ length: WORD_LENGTH }, (_, colIndex) => {
           if (resolvedTry) {
             if (resolvedTry.status === "SKIPPED") {

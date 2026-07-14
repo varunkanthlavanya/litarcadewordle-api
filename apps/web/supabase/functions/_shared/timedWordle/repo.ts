@@ -167,7 +167,11 @@ export async function loadAndReconcile(
   }
 
   if (changed) {
-    await persistSessionAndNewTries(db, sessionId, row.row_version, state, triesBefore);
+    const ok = await persistSessionAndNewTries(db, sessionId, row.row_version, state, triesBefore);
+    // Bumping row_version here (rather than re-querying) is safe: this function
+    // is the only writer that could have raced us between our read above and
+    // this persist, and if it had, `ok` would be false and we'd already know.
+    if (ok) row.row_version += 1;
   }
 
   return { row, state, secretWord: puzzle.secret_word, definition: puzzle.definition };

@@ -43,9 +43,40 @@ export function TimedWordleGame() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentGuess, setCurrentGuess] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const [shake, setShake] = useState(false);
   const [gameEnded, setGameEnded] = useState<TimedWordleGameEndedPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards against a guess going out twice — e.g. a user pressing physical
+  // Enter and clicking the on-screen Enter button in quick succession — since
+  // that's the one action here with a real server side-effect if duplicated.
+  const submittingRef = useRef(false);
+
+  // Refs mirroring the latest render's values, read from the single stable
+  // keydown listener further down — this is the standard fix for "listener
+  // needs fresh state but shouldn't be torn down and rebuilt on every
+  // keystroke" (which is exactly what was happening before: submitGuess used
+  // to close over `currentGuess` directly, so its identity changed on every
+  // keystroke, which re-subscribed the window listener on every keystroke).
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+  const currentGuessRef = useRef(currentGuess);
+  currentGuessRef.current = currentGuess;
+  const gameEndedRef = useRef(gameEnded);
+  gameEndedRef.current = gameEnded;
+  const isGameOverRef = useRef(false);
+  isGameOverRef.current = state?.status !== "IN_PROGRESS";
+  // Tracks which try the in-progress row belongs to, so the background
+  // reconcile heartbeat (fires every ~15s, or sooner at a real timer
+  // transition — see scheduleReconcile) can tell "nothing actually changed,
+  // leave what the player is typing alone" apart from "a new try genuinely
+  // started, clear the row". Without this, every heartbeat poll wiped
+  // whatever letters were mid-entry, which is what looked like the word
+  // "getting duplicated" — a keystroke lands right after a heartbeat clears
+  // the guess, so the row appears to reset/jumble mid-type.
+  const currentTryNumberRef = useRef<number | null>(null);
 
   const scheduleReconcile = useCallback((s: TimedWordleStateDto) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -54,6 +85,7 @@ export function TimedWordleGame() {
     const target = Math.min(nextTransitionAt, s.globalDeadlineAt);
     const delay = Math.max(target - Date.now(), 0) + RECONCILE_BUFFER_MS;
     timerRef.current = setTimeout(() => void fetchFresh(), Math.min(delay, HEARTBEAT_MS));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadEndedDetails = useCallback(async () => {
@@ -89,7 +121,10 @@ export function TimedWordleGame() {
       setLoading(false);
       setSessionId(res.sessionId);
       setState(res.state);
-      setCurrentGuess("");
+      if (currentTryNumberRef.current !== res.state.currentTryNumber) {
+        currentTryNumberRef.current = res.state.currentTryNumber;
+        setCurrentGuess("");
+      }
       if (res.state.status !== "IN_PROGRESS") {
         void loadEndedDetails();
       } else {
@@ -105,19 +140,46 @@ export function TimedWordleGame() {
     void fetchFresh();
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
+  const shakeRow = useCallback((message: string) => {
+    setHint(message);
+    setShake(true);
+    if (shakeTimerRef.current) clearTimeout(shakeTimerRef.current);
+    shakeTimerRef.current = setTimeout(() => {
+      setShake(false);
+      setHint(null);
+    }, 1200);
+  }, []);
+
   const submitGuess = useCallback(async () => {
-    if (!sessionId || currentGuess.length !== WORD_LENGTH) return;
+    if (submittingRef.current) return;
+    // Read the live values via refs (see below) rather than closing over
+    // `sessionId`/`currentGuess` directly, since this function is called from
+    // a keydown listener that's registered exactly once on mount.
+    const activeSessionId = sessionIdRef.current;
+    const guess = currentGuessRef.current;
+    if (!activeSessionId) return;
+    // Same feedback real Wordle gives for pressing Enter too early — shake
+    // the row and say so, rather than silently doing nothing.
+    if (guess.length !== WORD_LENGTH) {
+      shakeRow("Not enough letters");
+      return;
+    }
+
+    submittingRef.current = true;
     setError(null);
+    setHint(null);
     try {
       const res = await apiClient.post<{ feedback: TileColor[]; state: TimedWordleStateDto }>(
         `/player/events/${eventId}/timed-wordle/game/guess`,
-        { sessionId, guess: currentGuess }
+        { sessionId: activeSessionId, guess }
       );
       setState(res.state);
+      currentTryNumberRef.current = res.state.currentTryNumber;
       setCurrentGuess("");
       if (res.state.status !== "IN_PROGRESS") {
         void loadEndedDetails();
@@ -126,8 +188,11 @@ export function TimedWordleGame() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit guess");
+    } finally {
+      submittingRef.current = false;
     }
-  }, [sessionId, currentGuess, eventId, loadEndedDetails, scheduleReconcile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, loadEndedDetails, scheduleReconcile, shakeRow]);
 
   const handleKey = useCallback((key: string) => {
     setCurrentGuess((g) => (g.length < WORD_LENGTH ? g + key : g));
@@ -139,7 +204,7 @@ export function TimedWordleGame() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (gameEnded) return;
+      if (gameEndedRef.current || isGameOverRef.current) return;
       if (e.key === "Enter") {
         void submitGuess();
       } else if (e.key === "Backspace") {
@@ -150,7 +215,7 @@ export function TimedWordleGame() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [gameEnded, submitGuess, handleBackspace, handleKey]);
+  }, [submitGuess, handleBackspace, handleKey]);
 
   const letterStatus = useMemo(() => computeLetterStatus(state?.tries ?? []), [state?.tries]);
 
@@ -183,8 +248,13 @@ export function TimedWordleGame() {
         currentTryNumber={state.currentTryNumber}
         graceActive={state.graceActive}
       />
-      <div className="flex flex-1 items-center justify-center">
-        <WordGrid tries={state.tries} currentGuess={isGameOver ? "" : currentGuess} />
+      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        {hint && (
+          <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">
+            {hint}
+          </p>
+        )}
+        <WordGrid tries={state.tries} currentGuess={isGameOver ? "" : currentGuess} shakeCurrentRow={shake} />
       </div>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <Keyboard

@@ -185,6 +185,53 @@ Deno.serve(async (req) => {
       return json(req, { cohortSize: cohortSize ?? 0, onlineNow, completedCount });
     }
 
+    // GET /:id/roster -> full cohort with each player's Prelims/Playoffs status,
+    // for the admin's post-go-live "all players and their status" view.
+    if (rest.length === 2 && rest[1] === "roster" && req.method === "GET") {
+      const { data: cohort, error } = await db
+        .from("wl_event_players")
+        .select("id, display_name, mobile_number")
+        .eq("event_id", eventId)
+        .order("id", { ascending: true });
+      if (error) throw error;
+
+      const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+      const { data: uwPuzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+
+      const twByPlayer = new Map<number, { status: string; advanced_to_playoffs: boolean }>();
+      if (twPuzzle) {
+        const { data: twSessions } = await db
+          .from("wl_timed_wordle_sessions")
+          .select("event_player_id, status, advanced_to_playoffs")
+          .eq("puzzle_id", twPuzzle.id);
+        for (const s of twSessions ?? []) twByPlayer.set(s.event_player_id, s);
+      }
+
+      const uwByPlayer = new Map<number, { status: string }>();
+      if (uwPuzzle) {
+        const { data: uwSessions } = await db
+          .from("wl_unwordle_sessions")
+          .select("event_player_id, status")
+          .eq("puzzle_id", uwPuzzle.id);
+        for (const s of uwSessions ?? []) uwByPlayer.set(s.event_player_id, s);
+      }
+
+      const roster = (cohort ?? []).map((p) => {
+        const tw = twByPlayer.get(p.id);
+        const uw = uwByPlayer.get(p.id);
+        return {
+          eventPlayerId: p.id,
+          displayName: p.display_name,
+          mobileNumber: p.mobile_number,
+          prelimsStatus: tw?.status ?? "NOT_STARTED",
+          advancedToPlayoffs: tw?.advanced_to_playoffs ?? false,
+          playoffsStatus: uw?.status ?? null,
+        };
+      });
+
+      return json(req, roster);
+    }
+
     // POST /:id/status
     if (rest.length === 2 && rest[1] === "status" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));

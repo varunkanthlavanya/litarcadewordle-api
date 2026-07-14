@@ -60,3 +60,12 @@ export interface EventStats {
   onlineNow: number;
   completedCount: number;
 }
+
+export interface EventRosterEntry {
+  eventPlayerId: number;
+  displayName: string | null;
+  mobileNumber: string;
+  prelimsStatus: "NOT_STARTED" | "IN_PROGRESS" | "FOUND" | "NOT_FOUND_TRIES" | "NOT_FOUND_TIME" | "ADMIN_ENDED";
+  advancedToPlayoffs: boolean;
+  playoffsStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ENDED" | "EXITED" | null;
+}

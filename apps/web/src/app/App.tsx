@@ -13,6 +13,7 @@ import { AdminLayout } from "../features/admin/common/AdminLayout";
 import { EventsListPage } from "../features/admin/events/EventsListPage";
 import { EventSetupPage } from "../features/admin/events/EventSetupPage";
 import { EventControlCenter } from "../features/admin/events/EventControlCenter";
+import { EventEditPage } from "../features/admin/events/EventEditPage";
 import { TimedWordleAdminPanel } from "../features/admin/timed-wordle/TimedWordleAdminPanel";
 import { MessagingPanel } from "../features/admin/messaging/MessagingPanel";
 import { CutoffToolPage } from "../features/admin/cutoff/CutoffToolPage";
@@ -40,6 +41,7 @@ export function App() {
           <Route path="/admin/events" element={<EventsListPage />} />
           <Route path="/admin/events/new" element={<EventSetupPage />} />
           <Route path="/admin/events/:eventId" element={<EventControlCenter />} />
+          <Route path="/admin/events/:eventId/edit" element={<EventEditPage />} />
           <Route path="/admin/events/:eventId/prelims" element={<TimedWordleAdminPanel />} />
           <Route path="/admin/events/:eventId/messages" element={<MessagingPanel />} />
           <Route path="/admin/events/:eventId/cutoff" element={<CutoffToolPage />} />

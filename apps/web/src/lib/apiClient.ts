@@ -31,7 +31,7 @@ const ROUTES: Array<{ test: RegExp; to: (m: RegExpMatchArray) => string; audienc
 
   { test: /^\/admin\/events$/, to: () => `wl-events`, audience: "admin" },
   { test: /^\/admin\/events\/(\d+)$/, to: (m) => `wl-events/${m[1]}`, audience: "admin" },
-  { test: /^\/admin\/events\/(\d+)\/(stats|config|cohort|status)$/, to: (m) => `wl-events/${m[1]}/${m[2]}`, audience: "admin" },
+  { test: /^\/admin\/events\/(\d+)\/(stats|config|cohort|status|roster)$/, to: (m) => `wl-events/${m[1]}/${m[2]}`, audience: "admin" },
 
   { test: /^\/admin\/events\/(\d+)\/timed-wordle\/(.+)$/, to: (m) => `wl-timed-wordle/admin/${m[1]}/${m[2]}`, audience: "admin" },
   { test: /^\/player\/events\/(\d+)\/timed-wordle\/(.+)$/, to: (m) => `wl-timed-wordle/player/${m[1]}/${m[2]}`, audience: "player" },

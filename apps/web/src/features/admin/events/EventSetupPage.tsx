@@ -1,63 +1,58 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { UploadCloud } from "lucide-react";
 import type { EventApiRow } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BackLink } from "@/components/shared/BackLink";
-import { cn } from "@/lib/utils";
+import { CohortUploader, type ParsedCohort } from "@/components/shared/CohortUploader";
 
-interface ParsedCohort {
-  players: Array<{ mobileNumber: string; displayName?: string }>;
-  duplicateLines: Array<{ line: number; value: string }>;
-}
-
-function parseCsv(text: string): ParsedCohort {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const startIndex = lines[0]?.toLowerCase().startsWith("mobile_number") ? 1 : 0;
-  const seen = new Set<string>();
-  const duplicateLines: ParsedCohort["duplicateLines"] = [];
-  const players: ParsedCohort["players"] = [];
-
-  for (let i = startIndex; i < lines.length; i++) {
-    const [mobileNumber, displayName] = lines[i].split(",").map((c) => c?.trim());
-    if (!mobileNumber) continue;
-    if (seen.has(mobileNumber)) {
-      duplicateLines.push({ line: i + 1, value: mobileNumber });
-      continue;
-    }
-    seen.add(mobileNumber);
-    players.push({ mobileNumber, displayName: displayName || undefined });
-  }
-
-  return { players, duplicateLines };
+/** Local datetime-local input values (no timezone) -> ISO string in the
+ * platform's fixed event timezone-of-record is handled server-side; the
+ * value posted here is treated as the wall-clock time the admin picked. */
+function toIso(localDateTime: string): string | undefined {
+  if (!localDateTime) return undefined;
+  return new Date(localDateTime).toISOString();
 }
 
 export function EventSetupPage() {
   const navigate = useNavigate();
+  const [step, setStep] = useState<"form" | "confirm">("form");
   const [name, setName] = useState("");
+  const [roundOpensAt, setRoundOpensAt] = useState("");
+  const [roundClosesAt, setRoundClosesAt] = useState("");
   const [prelimsTopN, setPrelimsTopN] = useState(20);
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
   const [cohort, setCohort] = useState<ParsedCohort | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFile = useCallback((file: File) => {
-    file.text().then((text) => setCohort(parseCsv(text)));
-  }, []);
+  const missingFields: string[] = [];
+  if (!name.trim()) missingFields.push("event name");
+  if (!roundOpensAt) missingFields.push("round opens at");
+  if (!roundClosesAt) missingFields.push("round closes at");
+  if (!prelimsTopN) missingFields.push("prelims cutoff");
+  if (!playoffsWinnerCount) missingFields.push("winner count");
+  if (!cohort || cohort.players.length === 0) missingFields.push("cohort upload");
+  const canProceed = missingFields.length === 0;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function createEvent(goLive: boolean) {
     setError(null);
     setSubmitting(true);
     try {
       const event = await apiClient.post<EventApiRow>("/admin/events", { name });
-      await apiClient.post(`/admin/events/${event.id}/config`, { prelimsTopN, playoffsWinnerCount });
+      await apiClient.post(`/admin/events/${event.id}/config`, {
+        roundOpensAt: toIso(roundOpensAt),
+        roundClosesAt: toIso(roundClosesAt),
+        prelimsTopN,
+        playoffsWinnerCount,
+      });
       if (cohort && cohort.players.length > 0) {
         await apiClient.post(`/admin/events/${event.id}/cohort`, { players: cohort.players });
+      }
+      if (goLive) {
+        await apiClient.post(`/admin/events/${event.id}/status`, { status: "PRELIMS_SCHEDULED" });
       }
       navigate(`/admin/events/${event.id}`);
     } catch (err) {
@@ -71,97 +66,131 @@ export function EventSetupPage() {
     <div>
       <BackLink to="/admin/events" label="Back to Events" />
       <h1 className="mb-6 text-2xl font-bold">Create Event</h1>
-      <form onSubmit={handleSubmit} className="grid gap-8 md:grid-cols-2">
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-muted-foreground">Event details</h2>
-          <div className="space-y-2">
-            <Label htmlFor="name">Event name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="space-y-2">
-            <Label>Timezone</Label>
-            <Input value="Asia/Kolkata (IST)" disabled />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="topN">Prelims cutoff (Top N)</Label>
-            <Input
-              id="topN"
-              type="number"
-              min={5}
-              max={50}
-              value={prelimsTopN}
-              onChange={(e) => setPrelimsTopN(Number(e.target.value))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="winners">Winner count</Label>
-            <Input
-              id="winners"
-              type="number"
-              min={3}
-              max={5}
-              value={playoffsWinnerCount}
-              onChange={(e) => setPlayoffsWinnerCount(Number(e.target.value))}
-            />
-          </div>
-        </section>
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground">Cohort upload</h2>
-          <label
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const file = e.dataTransfer.files[0];
-              if (file) handleFile(file);
-            }}
-            className={cn(
-              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center text-sm text-muted-foreground transition-colors",
-              dragOver ? "border-primary bg-accent/10" : "border-border"
-            )}
-          >
-            <UploadCloud className="h-6 w-6" />
-            <span>Drop CSV here — columns: mobile_number, display_name (optional) · max 600 rows</span>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-              }}
-            />
-          </label>
-
-          {cohort && (
-            <div className="rounded-md border bg-success-subtle p-3 text-sm text-success">
-              ✓ {cohort.players.length} players uploaded
-              {cohort.duplicateLines.length > 0 && ` · ${cohort.duplicateLines.length} duplicates skipped`}
-              {cohort.duplicateLines.length > 0 && (
-                <ul className="mt-2 space-y-0.5 font-mono text-xs text-muted-foreground">
-                  {cohort.duplicateLines.map((d) => (
-                    <li key={d.line}>
-                      Line {d.line}: {d.value} — duplicate, skipped
-                    </li>
-                  ))}
-                </ul>
-              )}
+      {step === "form" && (
+        <div className="grid gap-8 md:grid-cols-2">
+          <section className="space-y-4">
+            <h2 className="text-sm font-semibold text-muted-foreground">Event details</h2>
+            <div className="space-y-2">
+              <Label htmlFor="name">Event name *</Label>
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
-          )}
-        </section>
+            <div className="space-y-2">
+              <Label>Timezone</Label>
+              <Input value="Asia/Kolkata (IST)" disabled />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="opensAt">Round opens at *</Label>
+                <Input
+                  id="opensAt"
+                  type="datetime-local"
+                  value={roundOpensAt}
+                  onChange={(e) => setRoundOpensAt(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="closesAt">Round closes at *</Label>
+                <Input
+                  id="closesAt"
+                  type="datetime-local"
+                  value={roundClosesAt}
+                  onChange={(e) => setRoundClosesAt(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="topN">Prelims cutoff (Top N) *</Label>
+              <Input
+                id="topN"
+                type="number"
+                min={1}
+                value={prelimsTopN}
+                onChange={(e) => setPrelimsTopN(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="winners">Winner count *</Label>
+              <Input
+                id="winners"
+                type="number"
+                min={1}
+                value={playoffsWinnerCount}
+                onChange={(e) => setPlayoffsWinnerCount(Number(e.target.value))}
+                required
+              />
+            </div>
+          </section>
 
-        <div className="md:col-span-2">
-          {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={submitting || !name}>
-            {submitting ? "Creating..." : "Create Event"}
-          </Button>
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">Cohort upload *</h2>
+            <CohortUploader cohort={cohort} onChange={setCohort} />
+          </section>
+
+          <div className="md:col-span-2">
+            {missingFields.length > 0 && (
+              <p className="mb-3 text-sm text-muted-foreground">
+                Still needed before you can continue: {missingFields.join(", ")}.
+              </p>
+            )}
+            <Button disabled={!canProceed} onClick={() => setStep("confirm")}>
+              Next
+            </Button>
+          </div>
         </div>
-      </form>
+      )}
+
+      {step === "confirm" && (
+        <div className="max-w-lg space-y-6">
+          <div className="rounded-lg border bg-card p-4 text-sm">
+            <dl className="space-y-2">
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Event name</dt>
+                <dd className="font-medium">{name}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Round window</dt>
+                <dd className="font-medium">
+                  {new Date(roundOpensAt).toLocaleString()} → {new Date(roundClosesAt).toLocaleString()}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Prelims cutoff</dt>
+                <dd className="font-medium">Top {prelimsTopN}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Winner count</dt>
+                <dd className="font-medium">{playoffsWinnerCount}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Cohort</dt>
+                <dd className="font-medium">{cohort?.players.length ?? 0} players</dd>
+              </div>
+            </dl>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" onClick={() => setStep("form")} disabled={submitting}>
+              Back to edit
+            </Button>
+            <Button variant="outline" onClick={() => createEvent(false)} disabled={submitting}>
+              {submitting ? "Saving..." : "Save as Draft"}
+            </Button>
+            <Button onClick={() => createEvent(true)} disabled={submitting}>
+              {submitting ? "Publishing..." : "Go Live"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Everything here — including the cohort — can still be edited later from the event's control center,
+            whether it's saved as a draft or already live.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

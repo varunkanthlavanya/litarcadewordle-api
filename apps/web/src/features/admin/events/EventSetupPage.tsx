@@ -126,7 +126,6 @@ export function EventSetupPage() {
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-muted-foreground">Cohort upload *</h2>
             <CohortUploader cohort={cohort} onChange={setCohort} />
           </section>
 

@@ -8,7 +8,6 @@ import type {
 import { apiClient } from "@/lib/apiClient";
 import { useAdminLiveRefresh } from "@/hooks/useAdminLiveRefresh";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
-import { BackLink } from "@/components/shared/BackLink";
 import { PresenceDot } from "@/components/shared/PresenceDot";
 import { SessionMonitorTable } from "@/components/shared/SessionMonitorTable";
 import { BulkActionsBar } from "@/components/shared/BulkActionsBar";
@@ -124,7 +123,6 @@ export function TimedWordleAdminPanel() {
 
   return (
     <div className="space-y-4">
-      <BackLink to={`/admin/events/${id}`} label="Back to Event Control Center" />
       <h1 className="text-2xl font-bold">Prelims — Timed Wordle</h1>
 
       <TwPuzzleSetupBar eventId={id} puzzle={puzzle} onChanged={loadPuzzle} />

@@ -1,25 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import type { EventApiRow, EventPlayerApiRow } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BackLink } from "@/components/shared/BackLink";
-import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { CohortUploader, type ParsedCohort } from "@/components/shared/CohortUploader";
-
-const EVENT_STATUS_MAP: Record<string, StatusBadgeStatus> = {
-  DRAFT: "draft",
-  COHORT_UPLOADED: "cohortUploaded",
-  PRELIMS_SCHEDULED: "prelimsScheduled",
-  PRELIMS_LIVE: "prelimsLive",
-  PRELIMS_CLOSED: "prelimsClosed",
-  PLAYOFFS_SCHEDULED: "playoffsScheduled",
-  PLAYOFFS_LIVE: "playoffsLive",
-  PLAYOFFS_CLOSED: "playoffsClosed",
-  ARCHIVED: "archived",
-};
+import type { EventWorkspaceContext } from "./EventWorkspaceLayout";
 
 function toIso(localDateTime: string): string | undefined {
   if (!localDateTime) return undefined;
@@ -37,15 +24,10 @@ function toLocalInputValue(iso: string | null): string {
 
 const isLiveStatus = (status: string) => status !== "DRAFT";
 
-function statusBadgeFor(status: string): StatusBadgeStatus {
-  return EVENT_STATUS_MAP[status] ?? "draft";
-}
-
 export function EventEditPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
+  const { event, reload } = useOutletContext<EventWorkspaceContext>();
 
-  const [event, setEvent] = useState<EventApiRow | null>(null);
   const [name, setName] = useState("");
   const [roundOpensAt, setRoundOpensAt] = useState("");
   const [roundClosesAt, setRoundClosesAt] = useState("");
@@ -59,14 +41,14 @@ export function EventEditPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiClient.get<EventApiRow>(`/admin/events/${eventId}`).then((e) => {
-      setEvent(e);
-      setName(e.name);
-      setRoundOpensAt(toLocalInputValue(e.round_opens_at));
-      setRoundClosesAt(toLocalInputValue(e.round_closes_at));
-      setPrelimsTopN(e.prelims_top_n ?? 20);
-      setPlayoffsWinnerCount(e.playoffs_winner_count ?? 3);
-    });
+    setName(event.name);
+    setRoundOpensAt(toLocalInputValue(event.round_opens_at));
+    setRoundClosesAt(toLocalInputValue(event.round_closes_at));
+    setPrelimsTopN(event.prelims_top_n ?? 20);
+    setPlayoffsWinnerCount(event.playoffs_winner_count ?? 3);
+  }, [event]);
+
+  useEffect(() => {
     apiClient.get<EventPlayerApiRow[]>(`/admin/events/${eventId}/cohort`).then((c) => setExistingCohortCount(c.length));
   }, [eventId]);
 
@@ -87,6 +69,7 @@ export function EventEditPage() {
         setNewCohort(null);
       }
       setSaved(true);
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save changes");
     } finally {
@@ -95,13 +78,12 @@ export function EventEditPage() {
   }
 
   async function setLive(goLive: boolean) {
-    if (!event) return;
     setSaving(true);
     setError(null);
     try {
       const status = goLive ? "PRELIMS_SCHEDULED" : "DRAFT";
-      const updated = await apiClient.post<EventApiRow>(`/admin/events/${eventId}/status`, { status });
-      setEvent(updated);
+      await apiClient.post<EventApiRow>(`/admin/events/${eventId}/status`, { status });
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not change event status");
     } finally {
@@ -109,15 +91,9 @@ export function EventEditPage() {
     }
   }
 
-  if (!event) return <p className="text-sm text-muted-foreground">Loading...</p>;
-
   return (
     <div>
-      <BackLink to={`/admin/events/${eventId}`} label="Back to Event Control Center" />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Edit Event</h1>
-        <StatusBadge status={statusBadgeFor(event.status)} />
-      </div>
+      <h1 className="mb-6 text-2xl font-bold">Cohort & Settings</h1>
 
       <div className="grid gap-8 md:grid-cols-2">
         <section className="space-y-4">

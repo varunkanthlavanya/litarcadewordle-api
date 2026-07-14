@@ -257,6 +257,30 @@ Deno.serve(async (req) => {
       return json(req, event);
     }
 
+    // DELETE /:id -> permanently delete the event and everything under it
+    // (cohort, sessions, tries, puzzles, winners, notifications — all FKs are
+    // ON DELETE CASCADE). wl_audit_log.event_id has no FK constraint, so the
+    // audit trail survives the deletion untouched; write the entry first so
+    // it captures the event's name before the row is gone.
+    if (rest.length === 1 && req.method === "DELETE") {
+      const { data: event } = await db.from("wl_events").select("name").eq("id", eventId).maybeSingle();
+      if (!event) return json(req, { error: "Event not found" }, 404);
+
+      await writeAuditEntry(db, {
+        adminLabel: admin.nameLabel,
+        eventId,
+        actionType: "EVENT_DELETED",
+        targetType: "event",
+        targetIds: [eventId],
+        metadata: { name: event.name },
+      });
+
+      const { error } = await db.from("wl_events").delete().eq("id", eventId);
+      if (error) throw error;
+
+      return json(req, { ok: true });
+    }
+
     // POST /:id/config
     if (rest.length === 2 && rest[1] === "config" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));

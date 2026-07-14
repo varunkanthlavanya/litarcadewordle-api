@@ -12,6 +12,7 @@ import { AdminLogin } from "../features/admin/common/AdminLogin";
 import { AdminLayout } from "../features/admin/common/AdminLayout";
 import { EventsListPage } from "../features/admin/events/EventsListPage";
 import { EventSetupPage } from "../features/admin/events/EventSetupPage";
+import { EventWorkspaceLayout } from "../features/admin/events/EventWorkspaceLayout";
 import { EventControlCenter } from "../features/admin/events/EventControlCenter";
 import { EventEditPage } from "../features/admin/events/EventEditPage";
 import { TimedWordleAdminPanel } from "../features/admin/timed-wordle/TimedWordleAdminPanel";
@@ -40,14 +41,16 @@ export function App() {
         <Route element={<AdminLayout />}>
           <Route path="/admin/events" element={<EventsListPage />} />
           <Route path="/admin/events/new" element={<EventSetupPage />} />
-          <Route path="/admin/events/:eventId" element={<EventControlCenter />} />
-          <Route path="/admin/events/:eventId/edit" element={<EventEditPage />} />
-          <Route path="/admin/events/:eventId/prelims" element={<TimedWordleAdminPanel />} />
-          <Route path="/admin/events/:eventId/messages" element={<MessagingPanel />} />
-          <Route path="/admin/events/:eventId/cutoff" element={<CutoffToolPage />} />
-          <Route path="/admin/events/:eventId/playoffs" element={<UnwordleAdminPanel />} />
-          <Route path="/admin/events/:eventId/winners" element={<WinnersPage />} />
-          <Route path="/admin/events/:eventId/audit" element={<AuditLogPage />} />
+          <Route element={<EventWorkspaceLayout />}>
+            <Route path="/admin/events/:eventId" element={<EventControlCenter />} />
+            <Route path="/admin/events/:eventId/edit" element={<EventEditPage />} />
+            <Route path="/admin/events/:eventId/prelims" element={<TimedWordleAdminPanel />} />
+            <Route path="/admin/events/:eventId/messages" element={<MessagingPanel />} />
+            <Route path="/admin/events/:eventId/cutoff" element={<CutoffToolPage />} />
+            <Route path="/admin/events/:eventId/playoffs" element={<UnwordleAdminPanel />} />
+            <Route path="/admin/events/:eventId/winners" element={<WinnersPage />} />
+            <Route path="/admin/events/:eventId/audit" element={<AuditLogPage />} />
+          </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

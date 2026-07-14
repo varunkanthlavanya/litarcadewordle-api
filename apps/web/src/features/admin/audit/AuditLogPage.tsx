@@ -5,7 +5,6 @@ import { apiClient } from "@/lib/apiClient";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BackLink } from "@/components/shared/BackLink";
 
 export function AuditLogPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -33,7 +32,6 @@ export function AuditLogPage() {
 
   return (
     <div>
-      <BackLink to={`/admin/events/${eventId}`} label="Back to Event Control Center" />
       <h1 className="mb-4 text-2xl font-bold">Audit Log</h1>
 
       <div className="mb-4 flex flex-wrap gap-3">

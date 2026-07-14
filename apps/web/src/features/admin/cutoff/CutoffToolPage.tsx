@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { BackLink } from "@/components/shared/BackLink";
 import { formatMmSs } from "@/hooks/useCountdown";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +47,10 @@ export function CutoffToolPage() {
   async function handleConfirm() {
     try {
       await apiClient.post(`/admin/events/${eventId}/cutoff/confirm`, { eventPlayerIds: [...advancingIds] });
-      navigate(`/admin/events/${eventId}`);
+      // Land on the Playoffs tab, not back at Overview — advancing players is
+      // always immediately followed by setting up/monitoring their UNWORDLE
+      // round, so that's the natural next stop, not a hub round-trip.
+      navigate(`/admin/events/${eventId}/playoffs`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not advance players");
     }
@@ -56,7 +58,6 @@ export function CutoffToolPage() {
 
   return (
     <div>
-      <BackLink to={`/admin/events/${eventId}`} label="Back to Event Control Center" />
       <h1 className="mb-4 text-2xl font-bold">Cutoff Tool</h1>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-end gap-3">

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import type { UnwordleLeaderboardEntry, UnwordleRoundStatusDto } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
 import { cn } from "@/lib/utils";
@@ -111,6 +112,10 @@ export function UnwordleResults() {
           <p className="mt-1 text-sm text-muted-foreground">Pending</p>
         )}
       </div>
+
+      <Button asChild variant="outline" className="mx-auto mt-6">
+        <Link to="/">Back to home</Link>
+      </Button>
     </div>
   );
 }

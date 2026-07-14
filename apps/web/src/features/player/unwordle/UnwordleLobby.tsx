@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock } from "lucide-react";
 import type { UnwordleRoundStatusDto } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 // UNWORDLE has no per-try deadline to schedule against (only an admin-driven
 // start/stop), so a plain interval poll is the simplest correct replacement
@@ -65,10 +66,13 @@ export function UnwordleLobby() {
 
   if (!status.isFinalist) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-4 text-center">
         <p className="text-sm text-muted-foreground">
           There's no Playoffs round available for you on this event yet.
         </p>
+        <Button asChild variant="outline">
+          <Link to="/">Back to home</Link>
+        </Button>
       </div>
     );
   }

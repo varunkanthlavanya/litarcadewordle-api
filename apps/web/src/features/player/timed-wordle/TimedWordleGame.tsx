@@ -45,6 +45,11 @@ export function TimedWordleGame() {
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
+  // Separate from submittingRef below — this one drives visible UI (disabling
+  // the keyboard, a "Checking..." indicator) so the player can tell their
+  // guess is actually being validated over the network, not just silently
+  // doing nothing until the reveal animation starts.
+  const [submitting, setSubmitting] = useState(false);
   const [gameEnded, setGameEnded] = useState<TimedWordleGameEndedPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -171,6 +176,7 @@ export function TimedWordleGame() {
     }
 
     submittingRef.current = true;
+    setSubmitting(true);
     setError(null);
     setHint(null);
     try {
@@ -190,6 +196,7 @@ export function TimedWordleGame() {
       setError(err instanceof Error ? err.message : "Could not submit guess");
     } finally {
       submittingRef.current = false;
+      setSubmitting(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, loadEndedDetails, scheduleReconcile, shakeRow]);
@@ -254,14 +261,24 @@ export function TimedWordleGame() {
             {hint}
           </p>
         )}
-        <WordGrid tries={state.tries} currentGuess={isGameOver ? "" : currentGuess} shakeCurrentRow={shake} />
+        {submitting && (
+          <p className="animate-presence-pulse text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Checking...
+          </p>
+        )}
+        <WordGrid
+          tries={state.tries}
+          currentGuess={isGameOver ? "" : currentGuess}
+          shakeCurrentRow={shake}
+          found={state.status === "FOUND"}
+        />
       </div>
       {error && <p className="text-center text-sm text-destructive">{error}</p>}
       <Keyboard
         onKey={handleKey}
         onEnter={() => void submitGuess()}
         onBackspace={handleBackspace}
-        disabled={isGameOver}
+        disabled={isGameOver || submitting}
         letterStatus={letterStatus}
       />
     </div>

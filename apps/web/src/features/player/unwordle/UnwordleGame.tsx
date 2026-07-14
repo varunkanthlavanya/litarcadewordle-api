@@ -29,6 +29,12 @@ export function UnwordleGame() {
   const [rejection, setRejection] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Which row (if any) should play its "just solved" reveal / "just
+  // rejected" shake right now — set at the exact moment we know the outcome
+  // (rather than diffed from render state), and cleared once the animation
+  // has had time to finish so it doesn't replay on later, unrelated re-renders.
+  const [justSolvedRow, setJustSolvedRow] = useState<number | null>(null);
+  const [shakeRow, setShakeRow] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +79,7 @@ export function UnwordleGame() {
 
   async function handleSubmit() {
     if (!sessionId || guess.length !== 5 || selectedRowSolved) return;
+    const rowBeingSubmitted = selectedRow;
     setSubmitting(true);
     setRejection(null);
     try {
@@ -83,17 +90,23 @@ export function UnwordleGame() {
 
       if (res.outcome.kind === "REJECTED_INVALID_WORD") {
         setRejection("Not a valid word — try again");
+        setShakeRow(rowBeingSubmitted);
+        setTimeout(() => setShakeRow(null), 400);
         return;
       }
       if (res.outcome.kind === "REJECTED_TILE_MISMATCH") {
         const reason = res.outcome.failedTiles?.[0]?.reason;
         setRejection(reason ? FAILED_TILE_MESSAGES[reason] ?? "Doesn't match this row's pattern" : "Doesn't match this row's pattern");
+        setShakeRow(rowBeingSubmitted);
+        setTimeout(() => setShakeRow(null), 400);
         return;
       }
 
       // ACCEPTED
       setGuess("");
       setState(res.state);
+      setJustSolvedRow(rowBeingSubmitted);
+      setTimeout(() => setJustSolvedRow(null), 1200);
 
       if (res.outcome.puzzleCompleted) {
         navigate(`/play/${eventId}/unwordle/results`, { replace: true });
@@ -139,7 +152,14 @@ export function UnwordleGame() {
 
       <div className="flex flex-col gap-2">
         {state.rows.map((row, i) => (
-          <UnwordleRow key={i} row={row} selected={i === selectedRow} onSelect={() => !row.solved && setSelectedRow(i)} />
+          <UnwordleRow
+            key={i}
+            row={row}
+            selected={i === selectedRow}
+            onSelect={() => !row.solved && setSelectedRow(i)}
+            justSolved={i === justSolvedRow}
+            shake={i === shakeRow}
+          />
         ))}
       </div>
 
@@ -155,9 +175,10 @@ export function UnwordleGame() {
               className="font-mono tracking-[0.3em]"
               maxLength={5}
               autoCapitalize="characters"
+              disabled={submitting}
             />
             <Button onClick={handleSubmit} disabled={submitting || guess.length !== 5}>
-              Submit
+              {submitting ? "Checking..." : "Submit"}
             </Button>
           </div>
           {rejection && <p className="text-sm text-destructive">{rejection}</p>}

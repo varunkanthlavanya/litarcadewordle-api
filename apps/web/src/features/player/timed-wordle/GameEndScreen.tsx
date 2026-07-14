@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/apiClient";
 import { formatMmSs } from "@/hooks/useCountdown";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,10 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
           </p>
         )}
       </div>
+
+      <Button asChild variant="outline" className="mt-6">
+        <Link to="/">Back to home</Link>
+      </Button>
     </div>
   );
 }

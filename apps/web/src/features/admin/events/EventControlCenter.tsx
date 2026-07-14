@@ -42,6 +42,7 @@ export function EventControlCenter() {
   const [roster, setRoster] = useState<EventRosterEntry[] | null>(null);
 
   useEffect(() => {
+    if (!eventId || !/^\d+$/.test(eventId)) return;
     apiClient.get<EventApiRow>(`/admin/events/${eventId}`).then(setEvent);
     apiClient.get<EventStats>(`/admin/events/${eventId}/stats`).then(setStats);
     apiClient.get<EventRosterEntry[]>(`/admin/events/${eventId}/roster`).then(setRoster);

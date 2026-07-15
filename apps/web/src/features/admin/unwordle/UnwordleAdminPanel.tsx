@@ -26,6 +26,7 @@ export function UnwordleAdminPanel() {
   const [sessions, setSessions] = useState<UnwordleSessionMonitorEntry[]>([]);
   const [leaderboard, setLeaderboard] = useState<UnwordleLeaderboardEntry[]>([]);
   const [endAllOpen, setEndAllOpen] = useState(false);
+  const [startAllOpen, setStartAllOpen] = useState(false);
 
   const loadPuzzle = useCallback(() => {
     apiClient
@@ -64,6 +65,11 @@ export function UnwordleAdminPanel() {
 
   async function endAll() {
     await apiClient.post(`/admin/events/${id}/unwordle/session/endAll`, {});
+    loadSessions();
+  }
+
+  async function startAll() {
+    await apiClient.post(`/admin/events/${id}/unwordle/session/startAll`, {});
     loadSessions();
   }
 
@@ -120,11 +126,24 @@ export function UnwordleAdminPanel() {
         </Table>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="default" onClick={() => setStartAllOpen(true)} disabled={sessions.every((s) => s.status !== "NOT_STARTED")}>
+          Start All
+        </Button>
         <Button variant="destructive" onClick={() => setEndAllOpen(true)} disabled={sessions.every((s) => s.status !== "IN_PROGRESS")}>
           End Game for Everyone
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={startAllOpen}
+        onOpenChange={setStartAllOpen}
+        title="Start Playoffs for everyone?"
+        description="This starts every not-yet-started player's Playoffs session (and their stopwatch) all at once, instead of starting them one at a time. Continue?"
+        confirmLabel="Start All"
+        destructive={false}
+        onConfirm={startAll}
+      />
 
       <ConfirmDialog
         open={endAllOpen}

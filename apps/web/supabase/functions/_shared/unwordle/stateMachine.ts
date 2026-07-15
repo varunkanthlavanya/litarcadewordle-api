@@ -38,21 +38,32 @@ export function createSession(solution: string, rowPatterns: TileColor[][]): Unw
     throw new InvalidUnwordleTransitionError(`Expected ${ROWS_PER_PUZZLE} row patterns`);
   }
 
-  return {
-    solution: solution.toUpperCase(),
-    status: "NOT_STARTED",
-    startTime: null,
-    stopTime: null,
-    rows: rowPatterns.map((pattern, rowIndex) => ({
+  const upperSolution = solution.toUpperCase();
+  // A row whose given pattern is entirely GREEN has no ambiguity to guess —
+  // Green always means "this exact letter, this exact position", so an
+  // all-green pattern already fully specifies the solution word. These are
+  // auto-solved as a freebie reveal rather than making the player type in
+  // something the pattern itself already gave away.
+  const rows = rowPatterns.map((pattern, rowIndex) => {
+    const isFreebie = pattern.every((c) => c === "GREEN");
+    return {
       rowIndex,
       pattern,
-      solved: false,
-      solvedWord: null,
+      solved: isFreebie,
+      solvedWord: isFreebie ? upperSolution : null,
       solvedAt: null,
       attempts: 0,
       invalidSubmissions: 0,
-    })),
-    rowsSolvedCount: 0,
+    };
+  });
+
+  return {
+    solution: upperSolution,
+    status: "NOT_STARTED",
+    startTime: null,
+    stopTime: null,
+    rows,
+    rowsSolvedCount: rows.filter((r) => r.solved).length,
     totalTimeMs: 0,
     totalAttempts: 0,
     totalInvalidSubmissions: 0,

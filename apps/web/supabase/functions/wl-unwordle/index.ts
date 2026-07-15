@@ -302,17 +302,36 @@ Deno.serve(async (req) => {
         const body = await req.json().catch(() => ({}));
         const eventPlayerIds: number[] = Array.isArray(body.eventPlayerIds) ? body.eventPlayerIds : [];
         if (eventPlayerIds.length === 0) return json(req, { error: "eventPlayerIds array is required" }, 400);
-        const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+        const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("id, solution_word, row_patterns").eq("event_id", eventId).maybeSingle();
         if (!puzzle) return json(req, { error: "No UNWORDLE puzzle exists for this event yet" }, 404);
+
+        // A row whose given pattern is entirely GREEN has no ambiguity to
+        // guess (see wl_confirm_cutoff for the same logic) — auto-solve it
+        // as a freebie reveal rather than making the player type in
+        // something the pattern itself already gave away.
+        const rowPatterns = puzzle.row_patterns as TileColor[][];
+        const freebieRows = rowPatterns.map((pattern) => pattern.every((c) => c === "GREEN"));
+        const freebieCount = freebieRows.filter(Boolean).length;
 
         const sessions = [];
         for (const eventPlayerId of eventPlayerIds) {
           let { data: row } = await db.from("wl_unwordle_sessions").select("*").eq("puzzle_id", puzzle.id).eq("event_player_id", eventPlayerId).maybeSingle();
           if (!row) {
-            const { data: inserted, error } = await db.from("wl_unwordle_sessions").insert({ puzzle_id: puzzle.id, event_player_id: eventPlayerId }).select("*").single();
+            const { data: inserted, error } = await db
+              .from("wl_unwordle_sessions")
+              .insert({ puzzle_id: puzzle.id, event_player_id: eventPlayerId, rows_solved_count: freebieCount })
+              .select("*")
+              .single();
             if (error) throw error;
             row = inserted;
-            await db.from("wl_unwordle_rows").insert(Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({ session_id: row!.id, row_index: rowIndex })));
+            await db.from("wl_unwordle_rows").insert(
+              Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
+                session_id: row!.id,
+                row_index: rowIndex,
+                solved: freebieRows[rowIndex],
+                solved_word: freebieRows[rowIndex] ? puzzle.solution_word : null,
+              }))
+            );
           }
           sessions.push(row);
         }
@@ -335,6 +354,27 @@ Deno.serve(async (req) => {
         await persistSession(db, sessionId, loaded.sessionRow.row_version, started);
         await writeAuditEntry(db, { adminLabel: admin.nameLabel, eventId, actionType: "UNWORDLE_SESSION_STARTED", targetType: "unwordle_session", targetIds: [sessionId] });
         return json(req, { ok: true, state: toStateDto(started) });
+      }
+
+      if (action === "session/startAll" && req.method === "POST") {
+        const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+        if (!puzzle) return json(req, { error: "No UNWORDLE puzzle exists for this event yet" }, 404);
+
+        const { data: sessions } = await db.from("wl_unwordle_sessions").select("id").eq("puzzle_id", puzzle.id).eq("status", "NOT_STARTED");
+        let count = 0;
+        const startedIds: number[] = [];
+        for (const s of sessions ?? []) {
+          const loaded = await loadSessionAndPuzzle(db, s.id);
+          if (!loaded || loaded.state.status !== "NOT_STARTED") continue;
+          const started = adminStartSession(loaded.state, Date.now());
+          const ok = await persistSession(db, s.id, loaded.sessionRow.row_version, started);
+          if (ok) {
+            count++;
+            startedIds.push(s.id);
+          }
+        }
+        await writeAuditEntry(db, { adminLabel: admin.nameLabel, eventId, actionType: "UNWORDLE_SESSION_STARTED", targetType: "unwordle_session", targetIds: startedIds, reason: "Bulk start — start Playoffs for everyone", metadata: { count } });
+        return json(req, { ok: true, count });
       }
 
       if (action === "session/end" && req.method === "POST") {

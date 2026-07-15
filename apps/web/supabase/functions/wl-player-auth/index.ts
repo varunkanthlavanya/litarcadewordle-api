@@ -38,12 +38,24 @@ Deno.serve(async (req) => {
       }
 
       const db = supabaseAdmin();
-      const { data: eventPlayer } = await db
+      // Matched by normalizing the STORED value too, not just a straight
+      // .eq() on mobile_number — cohorts uploaded before normalization
+      // existed (or before a backfill migration has actually run against
+      // this project) can still have raw "+91 8220 850 225"-style values on
+      // disk. Cohort size is capped at 600, so fetching per-event and
+      // comparing in JS is cheap and makes login correct regardless of
+      // what's actually stored, rather than depending on upload-time or
+      // backfill normalization having already happened.
+      const { data: eventPlayers } = await db
         .from("wl_event_players")
         .select("id, event_id, mobile_number, display_name")
-        .eq("event_id", eventId)
-        .eq("mobile_number", mobileNumber)
-        .maybeSingle();
+        .eq("event_id", eventId);
+
+      const eventPlayer = eventPlayers?.find((p) => {
+        const storedDigits = String(p.mobile_number ?? "").replace(/\D/g, "");
+        const storedNormalized = storedDigits.length > 10 ? storedDigits.slice(-10) : storedDigits;
+        return storedNormalized === mobileNumber;
+      });
 
       if (!eventPlayer) {
         return json(req, { error: "This mobile number is not on the whitelist for this event" }, 401);

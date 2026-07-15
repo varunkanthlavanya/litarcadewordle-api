@@ -55,6 +55,10 @@ export interface TimedWordleRoundStatusDto {
   roundClosesAt: string | null;
   sessionStatus: TimedWordleSessionStatus | null;
   sessionId: number | null;
+  /** True once this player has been advanced to the UNWORDLE playoffs round
+   * — a terminal `result` alone doesn't distinguish "finished, not advancing"
+   * from "finished, now belongs in the playoffs flow instead." */
+  advancedToPlayoffs: boolean;
   result: (TimedWordleGameEndedPayload["summary"] & {
     reason: TimedWordleGameEndedPayload["reason"];
     secretWord: string;

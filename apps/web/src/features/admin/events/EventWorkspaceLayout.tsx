@@ -91,6 +91,9 @@ export function EventWorkspaceLayout() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{event.name}</h1>
+          <span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs text-secondary-foreground">
+            Event ID: {event.id}
+          </span>
           <StatusBadge status={EVENT_STATUS_MAP[event.status] ?? "draft"} />
         </div>
         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>

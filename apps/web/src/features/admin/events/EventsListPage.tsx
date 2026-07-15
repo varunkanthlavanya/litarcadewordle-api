@@ -39,6 +39,7 @@ export function EventsListPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>ID</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
@@ -48,7 +49,7 @@ export function EventsListPage() {
           <TableBody>
             {events && events.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
                   No events yet — create your first event.
                 </TableCell>
               </TableRow>
@@ -59,6 +60,7 @@ export function EventsListPage() {
                 className="cursor-pointer"
                 onClick={() => navigate(`/admin/events/${event.id}`)}
               >
+                <TableCell className="font-mono text-xs text-muted-foreground">#{event.id}</TableCell>
                 <TableCell className="font-medium">{event.name}</TableCell>
                 <TableCell>
                   <StatusBadge status={EVENT_STATUS_MAP[event.status] ?? "draft"} />

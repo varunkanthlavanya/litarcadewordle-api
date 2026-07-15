@@ -269,6 +269,7 @@ Deno.serve(async (req) => {
           roundClosesAt: event.round_closes_at,
           sessionStatus: sessionRow?.status ?? null,
           sessionId: sessionRow?.id ?? null,
+          advancedToPlayoffs: sessionRow?.advanced_to_playoffs ?? false,
           result,
         });
       }

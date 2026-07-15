@@ -30,6 +30,11 @@ export function TimedWordleResultsPage() {
   if (!status.result || status.sessionId === null) {
     return <Navigate to={`/play/${eventId}/lobby`} replace />;
   }
+  // A player who's since advanced belongs in the playoffs flow, not stuck
+  // re-reading their old prelims result every time they revisit this URL.
+  if (status.advancedToPlayoffs) {
+    return <Navigate to={`/play/${eventId}/unwordle/lobby`} replace />;
+  }
 
   const payload: TimedWordleGameEndedPayload = {
     sessionId: status.sessionId,

@@ -39,7 +39,13 @@ export function WaitingLobby() {
   useEffect(() => {
     if (!status) return;
     if (status.result) {
-      navigate(`/play/${eventId}/results`, { replace: true });
+      // A terminal prelims result doesn't mean "done" — a player who
+      // advanced belongs in the playoffs flow instead of the prelims
+      // results dead end. UnwordleLobby does its own status check from
+      // here (in progress / completed / still waiting on the admin).
+      navigate(status.advancedToPlayoffs ? `/play/${eventId}/unwordle/lobby` : `/play/${eventId}/results`, {
+        replace: true,
+      });
     } else if (status.sessionStatus === "IN_PROGRESS") {
       navigate(`/play/${eventId}/game`, { replace: true });
     }

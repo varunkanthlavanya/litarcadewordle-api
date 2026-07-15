@@ -9,6 +9,10 @@ interface UnwordleRowProps {
   row: UnwordleRowDto;
   selected: boolean;
   onSelect: () => void;
+  /** The letters currently typed into this row, shown live in the tiles —
+   * only passed for the selected, unsolved row. Everything else about the
+   * tile (its given color) stays fixed; only the letter is user-driven. */
+  currentGuess?: string;
   /** True for exactly the render where this row transitions to solved —
    * staggers the solved word's letters in rather than having them just
    * appear, and bounces the checkmark in afterward. */
@@ -18,7 +22,7 @@ interface UnwordleRowProps {
   shake?: boolean;
 }
 
-export function UnwordleRow({ row, selected, onSelect, justSolved, shake }: UnwordleRowProps) {
+export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved, shake }: UnwordleRowProps) {
   return (
     <button
       type="button"
@@ -31,17 +35,22 @@ export function UnwordleRow({ row, selected, onSelect, justSolved, shake }: Unwo
         shake && "animate-shake"
       )}
     >
-      <div className="grid grid-cols-5 gap-1">
-        {row.pattern.map((color, i) => (
-          <WordleTile
-            key={i}
-            size="sm"
-            state="pattern"
-            patternColor={color}
-            letter={row.solved ? row.solvedWord?.[i] ?? "" : ""}
-            revealDelayMs={justSolved ? i * REVEAL_STAGGER_MS : undefined}
-          />
-        ))}
+      <div className="grid grid-cols-5 gap-1.5">
+        {row.pattern.map((color, i) => {
+          const typedLetter = currentGuess?.[i] ?? "";
+          const letter = row.solved ? row.solvedWord?.[i] ?? "" : typedLetter;
+          return (
+            <WordleTile
+              key={row.solved ? `solved-${i}` : `typing-${i}-${typedLetter}`}
+              size="md"
+              state="pattern"
+              patternColor={color}
+              letter={letter}
+              revealDelayMs={justSolved ? i * REVEAL_STAGGER_MS : undefined}
+              pop={!row.solved && typedLetter !== ""}
+            />
+          );
+        })}
       </div>
       {row.solved && (
         <span

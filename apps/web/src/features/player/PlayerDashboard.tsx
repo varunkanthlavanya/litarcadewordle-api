@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Lock, Clock } from "lucide-react";
 import type {
   TimedWordleLeaderboardEntry,
@@ -42,6 +42,7 @@ function timedWordleHeadline(result: NonNullable<TimedWordleRoundStatusDto["resu
  * decides it. */
 export function PlayerDashboard() {
   const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
 
   const [tw, setTw] = useState<TimedWordleRoundStatusDto | null>(null);
   const [twLeaderboard, setTwLeaderboard] = useState<TimedWordleLeaderboardEntry[] | null>(null);
@@ -96,6 +97,11 @@ export function PlayerDashboard() {
   const opensAtMs = tw?.roundStatus === "SCHEDULED" && tw.roundOpensAt ? new Date(tw.roundOpensAt).getTime() : null;
   const remainingMs = useCountdown(opensAtMs);
 
+  async function handleLogout() {
+    await apiClient.post("/player/auth/logout").catch(() => {});
+    navigate("/");
+  }
+
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
@@ -114,9 +120,14 @@ export function PlayerDashboard() {
 
   return (
     <div className="mx-auto min-h-screen max-w-3xl px-5 py-8">
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">Event</p>
-        <h1 className="text-2xl font-bold">{tw.eventName}</h1>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Event</p>
+          <h1 className="text-2xl font-bold">{tw.eventName}</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
+          Sign out
+        </Button>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">

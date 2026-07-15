@@ -9,7 +9,7 @@ import type {
 } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { WordGrid } from "./WordGrid";
-import { Keyboard } from "./Keyboard";
+import { Keyboard } from "@/components/shared/Keyboard";
 import { TimerHud } from "./TimerHud";
 import { GameEndScreen } from "./GameEndScreen";
 

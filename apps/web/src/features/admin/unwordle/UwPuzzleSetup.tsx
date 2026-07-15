@@ -11,6 +11,11 @@ interface UwPuzzleSetupProps {
   eventId: number;
   puzzle: { solution_word: string; row_patterns: TileColor[][]; status: "DRAFT" | "PUBLISHED" } | null;
   onChanged: () => void;
+  /** True once at least one player has an UNWORDLE session for this event —
+   * shown as a caution while editing, since changing the solution/patterns
+   * after players have already started (or finished) changes what they're
+   * solving retroactively. */
+  hasSessions?: boolean;
 }
 
 const NEXT_COLOR: Record<TileColor, TileColor> = { GRAY: "YELLOW", YELLOW: "GREEN", GREEN: "GRAY" };
@@ -19,7 +24,8 @@ function emptyPatterns(): TileColor[][] {
   return Array.from({ length: 4 }, () => Array<TileColor>(5).fill("GRAY"));
 }
 
-export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps) {
+export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuzzleSetupProps) {
+  const [editing, setEditing] = useState(false);
   const [solutionWord, setSolutionWord] = useState("");
   const [patterns, setPatterns] = useState<TileColor[][]>(emptyPatterns());
   const [validation, setValidation] = useState<{ valid: boolean; rowResults: Array<{ rowIndex: number; satisfiable: boolean }> } | null>(null);
@@ -35,6 +41,19 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
     setValidation(null);
   }
 
+  function startEditing() {
+    if (puzzle) {
+      setSolutionWord(puzzle.solution_word);
+      setPatterns(puzzle.row_patterns.map((row) => [...row]));
+    } else {
+      setSolutionWord("");
+      setPatterns(emptyPatterns());
+    }
+    setValidation(null);
+    setError(null);
+    setEditing(true);
+  }
+
   async function handleValidate() {
     setError(null);
     try {
@@ -48,14 +67,15 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
     }
   }
 
-  async function handleCreate() {
+  async function handleSave() {
     setSubmitting(true);
     setError(null);
     try {
       await apiClient.post(`/admin/events/${eventId}/unwordle/puzzle`, { solutionWord, rowPatterns: patterns });
+      setEditing(false);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create puzzle");
+      setError(err instanceof Error ? err.message : "Could not save puzzle");
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +93,7 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
     }
   }
 
-  if (puzzle) {
+  if (puzzle && !editing) {
     return (
       <div className="rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -84,6 +104,9 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
           <Badge variant={puzzle.status === "PUBLISHED" ? "success" : "secondary"}>{puzzle.status}</Badge>
           <Button size="sm" variant={puzzle.status === "PUBLISHED" ? "destructive" : "default"} onClick={togglePublish} disabled={submitting}>
             {puzzle.status === "PUBLISHED" ? "Unpublish" : "Publish"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={startEditing} disabled={submitting}>
+            Edit
           </Button>
         </div>
         <div className="mt-3 space-y-1.5">
@@ -105,7 +128,13 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
 
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="flex items-end gap-3">
+      {editing && puzzle && hasSessions && (
+        <p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+          Players already have Playoffs sessions for this puzzle — changing the solution or patterns changes what
+          they're solving, including anyone already in progress or finished.
+        </p>
+      )}
+      <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="solution">Solution</Label>
           <Input
@@ -119,9 +148,14 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged }: UwPuzzleSetupProps
         <Button variant="outline" onClick={handleValidate} disabled={solutionWord.length !== 5}>
           Validate
         </Button>
-        <Button onClick={handleCreate} disabled={submitting || solutionWord.length !== 5 || !validation?.valid}>
-          Create Puzzle
+        <Button onClick={handleSave} disabled={submitting || solutionWord.length !== 5 || !validation?.valid}>
+          {editing && puzzle ? "Save changes" : "Create Puzzle"}
         </Button>
+        {editing && puzzle && (
+          <Button variant="ghost" onClick={() => setEditing(false)} disabled={submitting}>
+            Cancel
+          </Button>
+        )}
       </div>
 
       <div className="space-y-1.5">

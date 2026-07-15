@@ -217,15 +217,36 @@ Deno.serve(async (req) => {
           return json(req, { error: `Row(s) ${badRows.join(", ")} have no valid word satisfying that pattern` }, 400);
         }
 
-        const { data: puzzle, error } = await db
-          .from("wl_unwordle_puzzles")
-          .insert({ event_id: eventId, solution_word: solutionWord.toUpperCase(), row_patterns: rowPatterns })
-          .select("*")
-          .single();
+        // Upsert by event_id rather than a bare insert: a second submission
+        // (editing an already-created puzzle) must update the existing row,
+        // not create a duplicate — wl_unwordle_sessions rows already created
+        // for advanced players are tied to this puzzle_id, and a duplicate
+        // puzzle row would break every player's status lookup (.maybeSingle()
+        // errors on more than one match).
+        const { data: existing } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+
+        const { data: puzzle, error } = existing
+          ? await db
+              .from("wl_unwordle_puzzles")
+              .update({ solution_word: solutionWord.toUpperCase(), row_patterns: rowPatterns })
+              .eq("id", existing.id)
+              .select("*")
+              .single()
+          : await db
+              .from("wl_unwordle_puzzles")
+              .insert({ event_id: eventId, solution_word: solutionWord.toUpperCase(), row_patterns: rowPatterns })
+              .select("*")
+              .single();
         if (error) return json(req, { error: error.message }, 400);
 
-        await writeAuditEntry(db, { adminLabel: admin.nameLabel, eventId, actionType: "UNWORDLE_PUZZLE_CREATED", targetType: "unwordle_puzzle", targetIds: [puzzle.id] });
-        return json(req, { puzzle, validation }, 201);
+        await writeAuditEntry(db, {
+          adminLabel: admin.nameLabel,
+          eventId,
+          actionType: existing ? "UNWORDLE_PUZZLE_UPDATED" : "UNWORDLE_PUZZLE_CREATED",
+          targetType: "unwordle_puzzle",
+          targetIds: [puzzle.id],
+        });
+        return json(req, { puzzle, validation }, existing ? 200 : 201);
       }
 
       if (action === "puzzle" && req.method === "GET") {

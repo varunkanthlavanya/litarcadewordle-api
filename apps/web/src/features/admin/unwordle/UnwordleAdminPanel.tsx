@@ -35,7 +35,10 @@ export function UnwordleAdminPanel() {
   }, [id]);
 
   const loadSessions = useCallback(() => {
-    apiClient.get<UnwordleSessionMonitorEntry[]>(`/admin/events/${id}/unwordle/sessions`).then(setSessions);
+    apiClient
+      .get<UnwordleSessionMonitorEntry[]>(`/admin/events/${id}/unwordle/sessions`)
+      .then(setSessions)
+      .catch(() => setSessions([]));
     apiClient
       .get<UnwordleLeaderboardEntry[]>(`/admin/events/${id}/unwordle/leaderboard`)
       .then(setLeaderboard)
@@ -68,7 +71,7 @@ export function UnwordleAdminPanel() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Playoffs — UNWORDLE</h1>
 
-      <UwPuzzleSetup eventId={id} puzzle={puzzle} onChanged={loadPuzzle} />
+      <UwPuzzleSetup eventId={id} puzzle={puzzle} onChanged={loadPuzzle} hasSessions={sessions.length > 0} />
 
       <div className="overflow-hidden rounded-lg border">
         <Table>

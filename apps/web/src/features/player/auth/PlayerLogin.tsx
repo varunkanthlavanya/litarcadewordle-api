@@ -17,9 +17,18 @@ export function PlayerLogin() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // Same normalization as the backend: strip everything but digits, keep
+    // the last 10 — handles a pasted "+91 8220 850 225" even though the
+    // field itself only expects the local number after the fixed +91 prefix.
+    const digits = mobileNumber.replace(/\D/g, "");
+    const normalized = digits.length > 10 ? digits.slice(-10) : digits;
+    if (normalized.length !== 10) {
+      setError("Enter a valid 10-digit mobile number");
+      return;
+    }
     setSubmitting(true);
     try {
-      await apiClient.post("/player/auth/login", { eventId: Number(eventId), mobileNumber });
+      await apiClient.post("/player/auth/login", { eventId: Number(eventId), mobileNumber: normalized });
       navigate(`/play/${eventId}/dashboard`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

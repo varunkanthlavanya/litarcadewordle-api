@@ -197,7 +197,7 @@ export function UnwordleGame() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 p-4">
+    <div className="mx-auto flex h-screen max-w-md flex-col gap-2 overflow-hidden p-3">
       <header className="flex items-center justify-between">
         <h1 className="text-base font-bold">UNWORDLE</h1>
         <div className="text-right">
@@ -206,30 +206,32 @@ export function UnwordleGame() {
         </div>
       </header>
 
-      <div className="flex flex-col gap-2">
-        {state.rows.map((row, i) => (
-          <UnwordleRow
-            key={i}
-            row={row}
-            selected={i === selectedRow}
-            onSelect={() => selectRow(i)}
-            currentGuess={i === selectedRow && !row.solved ? currentGuess : undefined}
-            justSolved={i === justSolvedRow}
-            shake={i === shakeRow}
-          />
-        ))}
-      </div>
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+        <div className="flex flex-col gap-2">
+          {state.rows.map((row, i) => (
+            <UnwordleRow
+              key={i}
+              row={row}
+              selected={i === selectedRow}
+              onSelect={() => selectRow(i)}
+              currentGuess={i === selectedRow && !row.solved ? currentGuess : undefined}
+              justSolved={i === justSolvedRow}
+              shake={i === shakeRow}
+            />
+          ))}
+        </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-        {!selectedRowSolved && (
-          <p className="text-xs text-muted-foreground">Row {selectedRow + 1} · type a 5-letter word matching this pattern</p>
-        )}
-        {rejection && (
-          <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">
-            {rejection}
-          </p>
-        )}
-        {submitting && <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Checking...</p>}
+        <div className="flex flex-col items-center gap-2 text-center">
+          {!selectedRowSolved && (
+            <p className="text-xs text-muted-foreground">Row {selectedRow + 1} · type a 5-letter word matching this pattern</p>
+          )}
+          {rejection && (
+            <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">
+              {rejection}
+            </p>
+          )}
+          {submitting && <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Checking...</p>}
+        </div>
       </div>
 
       <Keyboard

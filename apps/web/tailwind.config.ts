@@ -129,7 +129,7 @@ export default {
         "row-flash": "row-flash 800ms ease-out",
         "presence-pulse": "presence-pulse 1.6s ease-in-out infinite",
         shake: "shake 400ms ease-in-out",
-        "tile-flip": "tile-flip 500ms ease-in-out",
+        "tile-flip": "tile-flip 650ms ease-in-out",
         "tile-pop": "tile-pop 120ms ease-out",
         "tile-bounce": "tile-bounce 700ms ease-in-out",
       },

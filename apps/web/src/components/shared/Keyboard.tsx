@@ -66,8 +66,8 @@ function KeyButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex h-11 items-center justify-center rounded-md bg-secondary px-2 text-xs font-semibold uppercase text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:pointer-events-none disabled:opacity-50 sm:text-sm",
-        wide ? "min-w-[3.5rem] px-3" : "min-w-[2rem] flex-1 sm:min-w-[2.5rem]",
+        "flex h-12 items-center justify-center rounded-md bg-secondary px-2 text-sm font-semibold uppercase text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:pointer-events-none disabled:opacity-50 sm:h-14 sm:text-base",
+        wide ? "min-w-[3.25rem] px-2 text-xs sm:min-w-[4rem] sm:text-sm" : "min-w-[2rem] flex-1 sm:min-w-[2.5rem]",
         className
       )}
     >

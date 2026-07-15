@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
-import type { EventApiRow, EventPlayerApiRow } from "@litarcadewordle/shared-types";
+import type { EventApiRow, EventPlayerApiRow, EventWinnerApiRow } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CohortUploader, type ParsedCohort } from "@/components/shared/CohortUploader";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { EventWorkspaceContext } from "./EventWorkspaceLayout";
 
 function toIso(localDateTime: string): string | undefined {
@@ -35,6 +36,8 @@ export function EventEditPage() {
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
   const [existingCohortCount, setExistingCohortCount] = useState(0);
   const [newCohort, setNewCohort] = useState<ParsedCohort | null>(null);
+  const [winnersCount, setWinnersCount] = useState(0);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -50,6 +53,7 @@ export function EventEditPage() {
 
   useEffect(() => {
     apiClient.get<EventPlayerApiRow[]>(`/admin/events/${eventId}/cohort`).then((c) => setExistingCohortCount(c.length));
+    apiClient.get<EventWinnerApiRow[]>(`/admin/events/${eventId}/winners`).then((w) => setWinnersCount(w.length));
   }, [eventId]);
 
   async function handleSave() {
@@ -86,6 +90,19 @@ export function EventEditPage() {
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not change event status");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleArchive() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiClient.post<EventApiRow>(`/admin/events/${eventId}/status`, { status: "ARCHIVED" });
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not archive event");
     } finally {
       setSaving(false);
     }
@@ -137,24 +154,54 @@ export function EventEditPage() {
 
           <div className="rounded-lg border bg-card p-4">
             <p className="mb-3 text-sm font-medium">Event status</p>
-            <div className="flex gap-3">
-              <Button
-                variant={event.status === "DRAFT" ? "default" : "outline"}
-                disabled={saving || event.status === "DRAFT"}
-                onClick={() => setLive(false)}
-              >
-                Move to Draft
-              </Button>
-              <Button
-                variant={isLiveStatus(event.status) ? "default" : "outline"}
-                disabled={saving || isLiveStatus(event.status)}
-                onClick={() => setLive(true)}
-              >
-                Go Live
+            {event.status === "ARCHIVED" ? (
+              <p className="text-sm text-muted-foreground">
+                This event is archived — winners have been announced and it's closed for further changes.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant={event.status === "DRAFT" ? "default" : "outline"}
+                  disabled={saving || event.status === "DRAFT"}
+                  onClick={() => setLive(false)}
+                >
+                  Move to Draft
+                </Button>
+                <Button
+                  variant={isLiveStatus(event.status) ? "default" : "outline"}
+                  disabled={saving || isLiveStatus(event.status)}
+                  onClick={() => setLive(true)}
+                >
+                  Go Live
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {event.status !== "ARCHIVED" && (
+            <div className="rounded-lg border border-warning/40 bg-warning/5 p-4">
+              <p className="mb-1 text-sm font-medium">Archive event</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                {winnersCount > 0
+                  ? "Winners have been announced — this event is ready to archive."
+                  : "Unlocks once winners are saved on the Winners tab."}
+              </p>
+              <Button variant="outline" disabled={saving || winnersCount === 0} onClick={() => setArchiveOpen(true)}>
+                Archive Event
               </Button>
             </div>
-          </div>
+          )}
         </div>
+
+        <ConfirmDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          title={`Archive "${event.name}"?`}
+          description="This marks the event closed for good — cohort, schedule, and status can no longer be changed. Player and game data stays intact. Continue?"
+          confirmLabel="Archive Event"
+          destructive={false}
+          onConfirm={handleArchive}
+        />
       </div>
     </div>
   );

@@ -87,20 +87,35 @@ Deno.serve(async (req) => {
         return json(req, { error: "players array is required (max 600, each with mobileNumber)" }, 400);
       }
 
+      // Defense in depth: the frontend already normalizes before upload, but
+      // this is the only place a real login match can ever happen, so a raw
+      // "+91 8220 850 225"-style number has to become "8220850225" here too,
+      // regardless of what got past the client. Same rule everywhere: strip
+      // everything but digits, keep the last 10 (drops any country code).
+      const invalid: string[] = [];
+      const normalizedPlayers = players.map((p: { mobileNumber: string; displayName?: string }) => {
+        const digits = String(p.mobileNumber ?? "").replace(/\D/g, "");
+        const mobileNumber = digits.length > 10 ? digits.slice(-10) : digits;
+        if (mobileNumber.length !== 10) invalid.push(String(p.mobileNumber ?? ""));
+        return { ...p, mobileNumber };
+      });
+      if (invalid.length > 0) {
+        return json(req, { error: `Cohort upload contains mobile numbers that aren't 10 digits: ${invalid.join(", ")}` }, 400);
+      }
+
       const seen = new Set<string>();
       const duplicates = new Set<string>();
-      for (const p of players) {
-        const key = String(p.mobileNumber ?? "").trim();
-        if (seen.has(key)) duplicates.add(key);
-        seen.add(key);
+      for (const p of normalizedPlayers) {
+        if (seen.has(p.mobileNumber)) duplicates.add(p.mobileNumber);
+        seen.add(p.mobileNumber);
       }
       if (duplicates.size > 0) {
         return json(req, { error: `Cohort upload contains duplicate mobile numbers: ${[...duplicates].join(", ")}` }, 400);
       }
 
-      const records = players.map((p: { mobileNumber: string; displayName?: string }) => ({
+      const records = normalizedPlayers.map((p) => ({
         event_id: eventId,
-        mobile_number: p.mobileNumber.trim(),
+        mobile_number: p.mobileNumber,
         display_name: p.displayName?.trim() || null,
       }));
 

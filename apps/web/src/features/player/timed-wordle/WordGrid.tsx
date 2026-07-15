@@ -15,8 +15,8 @@ const COLOR_TO_STATE: Record<TileColor, "correct" | "present" | "absent"> = {
 // Must line up with WordleTile's own FLIP_DURATION_MS / tailwind's
 // "tile-flip" animation so a row's bounce celebration only starts once every
 // tile in it has actually finished flipping.
-const FLIP_STAGGER_MS = 220;
-const FLIP_DURATION_MS = 500;
+const FLIP_STAGGER_MS = 300;
+const FLIP_DURATION_MS = 650;
 const BOUNCE_STAGGER_MS = 80;
 
 interface WordGridProps {

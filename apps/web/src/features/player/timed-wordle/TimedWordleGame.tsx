@@ -193,7 +193,15 @@ export function TimedWordleGame() {
         scheduleReconcile(res.state);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not submit guess");
+      const message = err instanceof Error ? err.message : "Could not submit guess";
+      // Same treatment as "Not enough letters" — a shake + hint the player
+      // can immediately act on (retype), not a persistent error banner for
+      // something that isn't really an error, just an invalid attempt.
+      if (message === "Not in word list") {
+        shakeRow(message);
+      } else {
+        setError(message);
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -249,13 +257,13 @@ export function TimedWordleGame() {
   const isGameOver = state.status !== "IN_PROGRESS";
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 p-4">
+    <div className="mx-auto flex h-screen max-w-md flex-col gap-2 overflow-hidden p-3">
       <TimerHud
         globalDeadlineAt={state.globalDeadlineAt}
         currentTryNumber={state.currentTryNumber}
         graceActive={state.graceActive}
       />
-      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
         {hint && (
           <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">
             {hint}

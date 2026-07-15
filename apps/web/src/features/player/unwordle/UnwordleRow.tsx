@@ -3,7 +3,7 @@ import { WordleTile } from "@/components/shared/WordleTile";
 import { cn } from "@/lib/utils";
 import type { UnwordleRowDto } from "@litarcadewordle/shared-types";
 
-const REVEAL_STAGGER_MS = 180;
+const REVEAL_STAGGER_MS = 300;
 
 interface UnwordleRowProps {
   row: UnwordleRowDto;

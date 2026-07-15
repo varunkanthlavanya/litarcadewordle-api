@@ -7,6 +7,15 @@ import { cn } from "@/lib/utils";
 export interface ParsedCohort {
   players: Array<{ mobileNumber: string; displayName?: string }>;
   duplicateLines: Array<{ line: number; value: string }>;
+  invalidLines: Array<{ line: number; value: string }>;
+}
+
+// Same normalization rule as the backend (wl-events cohort upload, wl-player-auth
+// login): strip everything but digits, keep the last 10 — so "+91 8220 850 225"
+// becomes "8220850225" regardless of prefix or spacing.
+function normalizeMobileNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits;
 }
 
 function parseRows(rows: Array<Array<string | number | undefined>>): ParsedCohort {
@@ -14,22 +23,28 @@ function parseRows(rows: Array<Array<string | number | undefined>>): ParsedCohor
   const startIndex = first && first[0]?.startsWith("mobile_number") ? 1 : 0;
   const seen = new Set<string>();
   const duplicateLines: ParsedCohort["duplicateLines"] = [];
+  const invalidLines: ParsedCohort["invalidLines"] = [];
   const players: ParsedCohort["players"] = [];
 
   for (let i = startIndex; i < rows.length; i++) {
     const row = rows[i] ?? [];
-    const mobileNumber = String(row[0] ?? "").trim();
+    const rawMobileNumber = String(row[0] ?? "").trim();
     const displayName = String(row[1] ?? "").trim();
-    if (!mobileNumber) continue;
+    if (!rawMobileNumber) continue;
+    const mobileNumber = normalizeMobileNumber(rawMobileNumber);
+    if (mobileNumber.length !== 10) {
+      invalidLines.push({ line: i + 1, value: rawMobileNumber });
+      continue;
+    }
     if (seen.has(mobileNumber)) {
-      duplicateLines.push({ line: i + 1, value: mobileNumber });
+      duplicateLines.push({ line: i + 1, value: rawMobileNumber });
       continue;
     }
     seen.add(mobileNumber);
     players.push({ mobileNumber, displayName: displayName || undefined });
   }
 
-  return { players, duplicateLines };
+  return { players, duplicateLines, invalidLines };
 }
 
 async function parseFile(file: File): Promise<ParsedCohort> {
@@ -149,6 +164,8 @@ export function CohortUploader({
               Total players: <strong>{cohort.players.length}</strong>
               {cohort.duplicateLines.length > 0 &&
                 ` · ${cohort.duplicateLines.length} duplicate${cohort.duplicateLines.length === 1 ? "" : "s"} skipped`}
+              {cohort.invalidLines.length > 0 &&
+                ` · ${cohort.invalidLines.length} invalid number${cohort.invalidLines.length === 1 ? "" : "s"} skipped`}
             </span>
           </div>
           <div className="max-h-64 overflow-auto rounded-md border">
@@ -176,6 +193,15 @@ export function CohortUploader({
               {cohort.duplicateLines.map((d) => (
                 <li key={d.line}>
                   Row {d.line}: {d.value} — duplicate, skipped
+                </li>
+              ))}
+            </ul>
+          )}
+          {cohort.invalidLines.length > 0 && (
+            <ul className="space-y-0.5 font-mono text-xs text-destructive">
+              {cohort.invalidLines.map((d) => (
+                <li key={d.line}>
+                  Row {d.line}: {d.value} — not a valid 10-digit mobile number, skipped
                 </li>
               ))}
             </ul>

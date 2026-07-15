@@ -19,7 +19,7 @@ const TILE_COLOR_TO_STATE: Record<TileColor, "correct" | "present" | "absent"> =
 // Must match tailwind.config.ts's "tile-flip" animation duration — half of it
 // is the moment the tile is edge-on (rotateX 90deg) and invisible, which is
 // when a real Wordle-style reveal swaps the hidden face for the true one.
-const FLIP_DURATION_MS = 500;
+const FLIP_DURATION_MS = 650;
 const FLIP_HALF_MS = FLIP_DURATION_MS / 2;
 
 interface WordleTileProps {

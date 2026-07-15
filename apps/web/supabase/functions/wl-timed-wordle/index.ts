@@ -325,6 +325,7 @@ Deno.serve(async (req) => {
         const sessionId = Number(body.sessionId);
         const guess = typeof body.guess === "string" ? body.guess : "";
         if (guess.length !== 5 || !/^[A-Za-z]+$/.test(guess)) return json(req, { error: "Guess must be exactly 5 letters" }, 400);
+        if (!isValidGuessWord(guess)) return json(req, { error: "Not in word list" }, 400);
 
         const now = Date.now();
         const loaded = await loadAndReconcile(db, sessionId, now);

@@ -27,8 +27,13 @@ Deno.serve(async (req) => {
 
       const body = await req.json().catch(() => ({}));
       const eventId = Number(body.eventId);
-      const mobileNumber = typeof body.mobileNumber === "string" ? body.mobileNumber : "";
-      if (!Number.isInteger(eventId) || eventId <= 0 || mobileNumber.length < 6 || mobileNumber.length > 20) {
+      // Same normalization rule as cohort upload: strip everything but
+      // digits and keep the last 10, so "+91 8220 850 225" and "8220850225"
+      // match the same whitelisted row regardless of how either was entered.
+      const rawMobileNumber = typeof body.mobileNumber === "string" ? body.mobileNumber : "";
+      const digits = rawMobileNumber.replace(/\D/g, "");
+      const mobileNumber = digits.length > 10 ? digits.slice(-10) : digits;
+      if (!Number.isInteger(eventId) || eventId <= 0 || mobileNumber.length !== 10) {
         return json(req, { error: "eventId and mobileNumber are required" }, 400);
       }
 

@@ -48,7 +48,7 @@ function serializeState(state: TimedWordleSession) {
 async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: number) {
   const { data: rows } = await db
     .from("wl_timed_wordle_sessions")
-    .select("id, event_player_id, found, cumulative_time_ms, tries_used, tile_score")
+    .select("id, event_player_id, found, cumulative_time_ms, tries_used, tile_score, wl_event_players(display_name)")
     .eq("puzzle_id", puzzleId)
     .in("status", ["FOUND", "NOT_FOUND_TRIES", "NOT_FOUND_TIME", "ADMIN_ENDED"]);
 
@@ -59,12 +59,14 @@ async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: nu
     triesUsed: r.tries_used ?? 0,
     tileScore: r.tile_score ?? 0,
     eventPlayerId: r.event_player_id,
+    displayName: (r.wl_event_players as { display_name: string | null } | null)?.display_name ?? null,
   }));
   rankable.sort(compareTimedWordleSessions);
 
   return rankable.map((r, index) => ({
     sessionId: r.id,
     eventPlayerId: r.eventPlayerId,
+    displayName: r.displayName,
     found: r.found,
     cumulativeTimeMs: r.cumulativeTimeMs,
     triesUsed: r.triesUsed,

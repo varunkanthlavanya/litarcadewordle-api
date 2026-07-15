@@ -82,7 +82,7 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
       </div>
 
       <Button asChild variant="outline" className="mt-6">
-        <Link to="/">Back to home</Link>
+        <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>
       </Button>
     </div>
   );

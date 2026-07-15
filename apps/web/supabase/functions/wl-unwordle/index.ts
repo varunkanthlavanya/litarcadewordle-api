@@ -160,12 +160,16 @@ function toStateDto(state: UnwordleSession) {
 }
 
 async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: number) {
-  const { data: sessions } = await db.from("wl_unwordle_sessions").select("*").eq("puzzle_id", puzzleId);
+  const { data: sessions } = await db
+    .from("wl_unwordle_sessions")
+    .select("*, wl_event_players(display_name)")
+    .eq("puzzle_id", puzzleId);
   const rankable = (sessions ?? [])
     .filter((s) => isRankable(s.status))
     .map((s) => ({
       id: s.id,
       eventPlayerId: s.event_player_id,
+      displayName: (s.wl_event_players as { display_name: string | null } | null)?.display_name ?? null,
       rowsSolvedCount: s.rows_solved_count,
       totalTimeMs: s.total_time_ms,
       totalAttempts: s.total_attempts,
@@ -175,6 +179,7 @@ async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: nu
   return rankable.map((r, index) => ({
     sessionId: r.id,
     eventPlayerId: r.eventPlayerId,
+    displayName: r.displayName,
     rowsSolvedCount: r.rowsSolvedCount,
     totalTimeMs: r.totalTimeMs,
     totalAttempts: r.totalAttempts,

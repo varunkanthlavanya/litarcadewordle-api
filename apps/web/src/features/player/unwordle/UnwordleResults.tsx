@@ -114,7 +114,7 @@ export function UnwordleResults() {
       </div>
 
       <Button asChild variant="outline" className="mx-auto mt-6">
-        <Link to="/">Back to home</Link>
+        <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>
       </Button>
     </div>
   );

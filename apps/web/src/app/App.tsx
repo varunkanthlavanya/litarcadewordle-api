@@ -2,10 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Home } from "../features/home/Home";
 import { PlayerLogin } from "../features/player/auth/PlayerLogin";
 import { PlayerLayout } from "../features/player/PlayerLayout";
-import { WaitingLobby } from "../features/player/timed-wordle/WaitingLobby";
+import { PlayerDashboard } from "../features/player/PlayerDashboard";
 import { TimedWordleGame } from "../features/player/timed-wordle/TimedWordleGame";
 import { TimedWordleResultsPage } from "../features/player/timed-wordle/TimedWordleResultsPage";
-import { UnwordleLobby } from "../features/player/unwordle/UnwordleLobby";
 import { UnwordleGame } from "../features/player/unwordle/UnwordleGame";
 import { UnwordleResults } from "../features/player/unwordle/UnwordleResults";
 import { AdminLogin } from "../features/admin/common/AdminLogin";
@@ -29,10 +28,9 @@ export function App() {
         <Route path="/" element={<Home />} />
         <Route path="/play/:eventId" element={<PlayerLogin />} />
         <Route element={<PlayerLayout />}>
-          <Route path="/play/:eventId/lobby" element={<WaitingLobby />} />
+          <Route path="/play/:eventId/dashboard" element={<PlayerDashboard />} />
           <Route path="/play/:eventId/game" element={<TimedWordleGame />} />
           <Route path="/play/:eventId/results" element={<TimedWordleResultsPage />} />
-          <Route path="/play/:eventId/unwordle/lobby" element={<UnwordleLobby />} />
           <Route path="/play/:eventId/unwordle/game" element={<UnwordleGame />} />
           <Route path="/play/:eventId/unwordle/results" element={<UnwordleResults />} />
         </Route>

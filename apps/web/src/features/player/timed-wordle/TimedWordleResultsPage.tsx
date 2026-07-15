@@ -19,7 +19,7 @@ export function TimedWordleResultsPage() {
       .catch(() => setNotFound(true));
   }, [eventId]);
 
-  if (notFound) return <Navigate to={`/play/${eventId}/lobby`} replace />;
+  if (notFound) return <Navigate to={`/play/${eventId}/dashboard`} replace />;
   if (!status) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -28,12 +28,7 @@ export function TimedWordleResultsPage() {
     );
   }
   if (!status.result || status.sessionId === null) {
-    return <Navigate to={`/play/${eventId}/lobby`} replace />;
-  }
-  // A player who's since advanced belongs in the playoffs flow, not stuck
-  // re-reading their old prelims result every time they revisit this URL.
-  if (status.advancedToPlayoffs) {
-    return <Navigate to={`/play/${eventId}/unwordle/lobby`} replace />;
+    return <Navigate to={`/play/${eventId}/dashboard`} replace />;
   }
 
   const payload: TimedWordleGameEndedPayload = {

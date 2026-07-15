@@ -44,7 +44,7 @@ export function UnwordleGame() {
       .then((res) => {
         if (cancelled) return;
         if (res.sessionStatus !== "IN_PROGRESS" || !res.state || !res.sessionId) {
-          navigate(`/play/${eventId}/unwordle/lobby`, { replace: true });
+          navigate(`/play/${eventId}/dashboard`, { replace: true });
           return;
         }
         setSessionId(res.sessionId);

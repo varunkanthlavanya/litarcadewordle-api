@@ -37,6 +37,7 @@ export interface TimedWordleStateDto {
 export interface TimedWordleLeaderboardEntry {
   sessionId: number;
   eventPlayerId: number;
+  displayName: string | null;
   found: boolean;
   cumulativeTimeMs: number;
   triesUsed: number;

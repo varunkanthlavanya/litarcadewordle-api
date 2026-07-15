@@ -25,6 +25,7 @@ export interface UnwordleStateDto {
 export interface UnwordleLeaderboardEntry {
   sessionId: number;
   eventPlayerId: number;
+  displayName: string | null;
   rowsSolvedCount: number;
   totalTimeMs: number;
   totalAttempts: number;

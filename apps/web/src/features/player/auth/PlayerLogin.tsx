@@ -20,7 +20,7 @@ export function PlayerLogin() {
     setSubmitting(true);
     try {
       await apiClient.post("/player/auth/login", { eventId: Number(eventId), mobileNumber });
-      navigate(`/play/${eventId}/lobby`);
+      navigate(`/play/${eventId}/dashboard`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

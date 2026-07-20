@@ -35,10 +35,16 @@ export function TwPuzzleSetupBar({ eventId, puzzle, onChanged }: TwPuzzleSetupBa
   async function toggleRound() {
     if (!puzzle) return;
     const nextStatus = puzzle.status === "OPEN" ? "CLOSED" : "OPEN";
+    setError(null);
     setSubmitting(true);
     try {
       await apiClient.post(`/admin/events/${eventId}/timed-wordle/puzzle/status`, { status: nextStatus });
       onChanged();
+    } catch (err) {
+      // Previously uncaught — a failed request here just did nothing
+      // visible at all, which looked exactly like a broken "Open Round"
+      // button instead of showing whatever actually went wrong.
+      setError(err instanceof Error ? err.message : "Could not update round status");
     } finally {
       setSubmitting(false);
     }
@@ -88,6 +94,7 @@ export function TwPuzzleSetupBar({ eventId, puzzle, onChanged }: TwPuzzleSetupBa
       >
         {puzzle.status === "OPEN" ? "Close Round" : "Open Round"}
       </Button>
+      {error && <p className="w-full text-sm text-destructive">{error}</p>}
     </div>
   );
 }

@@ -26,9 +26,13 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
   const { eventId } = useParams<{ eventId: string }>();
   const [rank, setRank] = useState<number | null>(null);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
-  const [rankPending, setRankPending] = useState(true);
+  // A player's own game can end long before everyone else's — showing rank
+  // off a partial leaderboard would mean it visibly changes on them later as
+  // more people finish, so it stays hidden entirely until the round closes.
+  const roundClosed = result.roundStatus === "CLOSED";
 
   useEffect(() => {
+    if (!roundClosed) return;
     apiClient
       .get<TimedWordleLeaderboardEntry[]>(`/player/events/${eventId}/timed-wordle/leaderboard`)
       .then((leaderboard) => {
@@ -36,13 +40,10 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
         if (mine) {
           setRank(mine.rank);
           setTotalPlayers(leaderboard.length);
-          setRankPending(false);
         }
       })
-      .catch(() => {
-        // leaderboard not ready yet (e.g. other players still playing) — stays "pending"
-      });
-  }, [eventId, result.sessionId]);
+      .catch(() => {});
+  }, [eventId, result.sessionId, roundClosed]);
 
   const found = result.summary.found;
 
@@ -69,10 +70,12 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
 
       <div className="mt-5 rounded-xl border bg-card p-4 text-center">
         <p className="text-xs text-muted-foreground">Your rank</p>
-        {rankPending ? (
+        {!roundClosed ? (
           <Badge variant="secondary" className="mt-1">
-            Pending — leaderboard finalizes after the window closes
+            Hidden until the Prelims round closes for everyone
           </Badge>
+        ) : rank === null ? (
+          <Badge variant="secondary" className="mt-1">Calculating...</Badge>
         ) : (
           <p className="mt-1 text-3xl font-extrabold">
             #{rank}

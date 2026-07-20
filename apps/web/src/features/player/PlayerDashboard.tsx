@@ -79,7 +79,13 @@ export function PlayerDashboard() {
   }, [eventId]);
 
   useEffect(() => {
-    if (!tw || tw.roundStatus === "SCHEDULED") return;
+    // A partial leaderboard while the round is still OPEN would show a rank
+    // that keeps shifting as more players finish — only reveal it once the
+    // round has actually CLOSED for everyone.
+    if (!tw || tw.roundStatus !== "CLOSED") {
+      setTwLeaderboard(null);
+      return;
+    }
     apiClient
       .get<TimedWordleLeaderboardEntry[]>(`/player/events/${eventId}/timed-wordle/leaderboard`)
       .then(setTwLeaderboard)

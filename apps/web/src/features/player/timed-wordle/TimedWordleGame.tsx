@@ -103,6 +103,7 @@ export function TimedWordleGame() {
           reason: status.result.reason,
           secretWord: status.result.secretWord,
           definition: status.result.definition,
+          roundStatus: status.roundStatus,
           summary: {
             found: status.result.found,
             cumulativeTimeMs: status.result.cumulativeTimeMs,

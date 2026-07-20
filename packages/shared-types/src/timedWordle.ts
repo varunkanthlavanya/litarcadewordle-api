@@ -86,6 +86,11 @@ export interface TimedWordleGameEndedPayload {
   reason: "solved" | "tries_exhausted" | "time_expired" | "admin_forced" | "unknown";
   secretWord: string;
   definition: string | null;
+  /** Whether the Prelims round itself has closed yet — a player's own game
+   * can end (found/timed out) long before everyone else has finished, and
+   * rank/leaderboard must stay hidden until this is "CLOSED" so a player's
+   * position can't visibly change on them after the fact. */
+  roundStatus: "SCHEDULED" | "OPEN" | "CLOSED";
   summary: {
     found: boolean;
     cumulativeTimeMs: number;

@@ -1,9 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Link } from "react-router-dom";
+import { PlayerLoginForm } from "@/features/player/auth/PlayerLoginForm";
 
 // The wordmark: each letter of WORDLE styled like a game tile, echoing the
 // actual gameplay tiles rather than a generic logo mark.
@@ -17,15 +13,6 @@ const WORDMARK_TILES = [
 ] as const;
 
 export function Home() {
-  const [eventId, setEventId] = useState("");
-  const navigate = useNavigate();
-
-  function handlePlayerEnter(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = eventId.trim();
-    if (trimmed) navigate(`/play/${trimmed}`);
-  }
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[oklch(0.94_0.012_75)] px-5 py-12">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-background px-8 py-10 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
@@ -45,23 +32,7 @@ export function Home() {
             A two-stage Wordle tournament — Prelims speed round, then Playoffs reverse-Wordle showdown.
           </p>
 
-          <form onSubmit={handlePlayerEnter} className="mt-8 w-full space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="eventId">Event ID</Label>
-              <Input
-                id="eventId"
-                value={eventId}
-                onChange={(e) => setEventId(e.target.value)}
-                placeholder="e.g. 1"
-                required
-                autoFocus
-              />
-            </div>
-            <Button type="submit" size="lg" className="w-full">
-              Enter
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          </form>
+          <PlayerLoginForm />
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
             Are you an event admin?{" "}

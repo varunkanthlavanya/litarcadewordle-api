@@ -48,6 +48,19 @@ const ROUTES: Array<{ test: RegExp; to: (m: RegExpMatchArray) => string; audienc
   { test: /^\/player\/notifications\/(\d+)\/read$/, to: (m) => `wl-notifications/player/${m[1]}/read`, audience: "player" },
 ];
 
+// Some endpoints (e.g. player login) return an optional `field` alongside
+// the error message, naming which specific input the error belongs to — so
+// a form with multiple inputs can show the message next to the right one
+// instead of one generic banner for every possible failure.
+export class ApiError extends Error {
+  field?: string;
+  constructor(message: string, field?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.field = field;
+  }
+}
+
 function resolveRoute(path: string): { functionPath: string; audience: "admin" | "player" | null } {
   const [pathname, query] = path.split("?");
   for (const route of ROUTES) {
@@ -77,7 +90,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(body.error ?? `Request failed: ${res.status}`);
+    throw new ApiError(body.error ?? `Request failed: ${res.status}`, typeof body.field === "string" ? body.field : undefined);
   }
 
   // Login endpoints return a bearer token in the body — captured here,

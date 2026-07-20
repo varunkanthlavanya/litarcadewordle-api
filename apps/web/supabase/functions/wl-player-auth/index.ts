@@ -33,11 +33,25 @@ Deno.serve(async (req) => {
       const rawMobileNumber = typeof body.mobileNumber === "string" ? body.mobileNumber : "";
       const digits = rawMobileNumber.replace(/\D/g, "");
       const mobileNumber = digits.length > 10 ? digits.slice(-10) : digits;
-      if (!Number.isInteger(eventId) || eventId <= 0 || mobileNumber.length !== 10) {
-        return json(req, { error: "eventId and mobileNumber are required" }, 400);
+
+      // `field` tells the client which of the two inputs the error actually
+      // belongs to, so "wrong event ID" and "number not on the whitelist"
+      // read as distinct, correctly-targeted messages instead of one vague
+      // failure that could mean either.
+      if (!Number.isInteger(eventId) || eventId <= 0) {
+        return json(req, { error: "Enter a valid event ID", field: "eventId" }, 400);
+      }
+      if (mobileNumber.length !== 10) {
+        return json(req, { error: "Enter a valid 10-digit mobile number", field: "mobileNumber" }, 400);
       }
 
       const db = supabaseAdmin();
+
+      const { data: event } = await db.from("wl_events").select("id").eq("id", eventId).maybeSingle();
+      if (!event) {
+        return json(req, { error: "Event ID not found", field: "eventId" }, 404);
+      }
+
       // Matched by normalizing the STORED value too, not just a straight
       // .eq() on mobile_number — cohorts uploaded before normalization
       // existed (or before a backfill migration has actually run against
@@ -58,7 +72,7 @@ Deno.serve(async (req) => {
       });
 
       if (!eventPlayer) {
-        return json(req, { error: "This mobile number is not on the whitelist for this event" }, 401);
+        return json(req, { error: "This mobile number is not on the whitelist for this event", field: "mobileNumber" }, 401);
       }
 
       const token = generateToken();

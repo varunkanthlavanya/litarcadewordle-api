@@ -4,6 +4,7 @@ import type { TileColor, UnwordleRoundStatusDto, UnwordleRowDto, UnwordleStateDt
 import { apiClient } from "@/lib/apiClient";
 import { Keyboard } from "@/components/shared/Keyboard";
 import { formatHhMmSsFromElapsed, useStopwatch } from "@/hooks/useStopwatch";
+import { orderRowsForDisplay } from "@/lib/unwordleRows";
 import { UnwordleRow } from "./UnwordleRow";
 
 const WORD_LENGTH = 5;
@@ -46,6 +47,10 @@ export function UnwordleGame() {
   const navigate = useNavigate();
   const [state, setState] = useState<UnwordleStateDto | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  // Tracks the row's stable `rowIndex` (its identity), not its position in
+  // the display list — the target/reference row is always rendered last
+  // (see `displayRows` below) regardless of where its rowIndex falls, so
+  // array position and rowIndex diverge once that reordering happens.
   const [selectedRow, setSelectedRow] = useState(0);
   const [currentGuess, setCurrentGuess] = useState("");
   const [rejection, setRejection] = useState<string | null>(null);
@@ -71,8 +76,8 @@ export function UnwordleGame() {
         }
         setSessionId(res.sessionId);
         setState(res.state);
-        const firstUnsolved = res.state.rows.findIndex((r) => !r.solved);
-        if (firstUnsolved >= 0) setSelectedRow(firstUnsolved);
+        const firstUnsolved = res.state.rows.find((r) => !r.solved);
+        if (firstUnsolved) setSelectedRow(firstUnsolved.rowIndex);
       })
       .catch((err: Error) => {
         if (!cancelled) setLoadError(err.message);
@@ -97,10 +102,15 @@ export function UnwordleGame() {
 
   const elapsedMs = useStopwatch(state?.startTime ?? null);
 
-  const selectedRowSolved = state?.rows[selectedRow]?.solved ?? false;
+  // The target/reference row (all-GREEN pattern) is always rendered last,
+  // like a fixed answer key at the bottom of the board, regardless of which
+  // rowIndex the admin happened to set it up as.
+  const displayRows = useMemo(() => orderRowsForDisplay(state?.rows ?? [], (r) => r.pattern), [state?.rows]);
+
+  const selectedRowSolved = state?.rows.find((r) => r.rowIndex === selectedRow)?.solved ?? false;
 
   function selectRow(rowIndex: number) {
-    if (state?.rows[rowIndex]?.solved) return;
+    if (state?.rows.find((r) => r.rowIndex === rowIndex)?.solved) return;
     setSelectedRow(rowIndex);
     setCurrentGuess("");
     setRejection(null);
@@ -151,8 +161,8 @@ export function UnwordleGame() {
         return;
       }
 
-      const nextUnsolved = res.state.rows.findIndex((r) => !r.solved);
-      if (nextUnsolved >= 0) setSelectedRow(nextUnsolved);
+      const nextUnsolved = res.state.rows.find((r) => !r.solved);
+      if (nextUnsolved) setSelectedRow(nextUnsolved.rowIndex);
     } catch (err) {
       setRejection(err instanceof Error ? err.message : "Could not submit");
     } finally {
@@ -208,22 +218,25 @@ export function UnwordleGame() {
 
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
         <div className="flex flex-col gap-2">
-          {state.rows.map((row, i) => (
+          {displayRows.map((row) => (
             <UnwordleRow
-              key={i}
+              key={row.rowIndex}
               row={row}
-              selected={i === selectedRow}
-              onSelect={() => selectRow(i)}
-              currentGuess={i === selectedRow && !row.solved ? currentGuess : undefined}
-              justSolved={i === justSolvedRow}
-              shake={i === shakeRow}
+              selected={row.rowIndex === selectedRow}
+              onSelect={() => selectRow(row.rowIndex)}
+              currentGuess={row.rowIndex === selectedRow && !row.solved ? currentGuess : undefined}
+              justSolved={row.rowIndex === justSolvedRow}
+              shake={row.rowIndex === shakeRow}
             />
           ))}
         </div>
 
         <div className="flex flex-col items-center gap-2 text-center">
           {!selectedRowSolved && (
-            <p className="text-xs text-muted-foreground">Row {selectedRow + 1} · type a 5-letter word matching this pattern</p>
+            <p className="text-xs text-muted-foreground">
+              Row {displayRows.findIndex((r) => r.rowIndex === selectedRow) + 1} · type a 5-letter word matching this
+              pattern
+            </p>
           )}
           {rejection && (
             <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">

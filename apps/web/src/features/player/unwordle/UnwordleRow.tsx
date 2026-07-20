@@ -23,6 +23,11 @@ interface UnwordleRowProps {
 }
 
 export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved, shake }: UnwordleRowProps) {
+  // The first empty slot in the row currently being typed into — shown with
+  // a dashed cursor so it's clear exactly where the next keystroke lands.
+  const activeIndex =
+    selected && !row.solved ? row.pattern.findIndex((_, i) => (currentGuess?.[i] ?? "") === "") : -1;
+
   return (
     <button
       type="button"
@@ -48,6 +53,7 @@ export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved,
               letter={letter}
               revealDelayMs={justSolved ? i * REVEAL_STAGGER_MS : undefined}
               pop={!row.solved && typedLetter !== ""}
+              active={i === activeIndex}
             />
           );
         })}

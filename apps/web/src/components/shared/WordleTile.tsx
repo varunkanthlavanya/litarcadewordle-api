@@ -44,6 +44,9 @@ interface WordleTileProps {
   /** Quick scale-up pop, for a letter that was just typed into an empty tile
    * — pair with a `key` that changes per keystroke so the animation restarts. */
   pop?: boolean;
+  /** Marks this as the next empty slot the player will type into — shown as
+   * a dashed border cursor, on top of whatever color the tile already has. */
+  active?: boolean;
 }
 
 const SIZE_CLASSES: Record<NonNullable<WordleTileProps["size"]>, string> = {
@@ -61,6 +64,7 @@ export function WordleTile({
   revealDelayMs,
   bounceDelayMs,
   pop,
+  active,
 }: WordleTileProps) {
   const [revealed, setRevealed] = useState(revealDelayMs === undefined);
   const [flipping, setFlipping] = useState(false);
@@ -149,6 +153,10 @@ export function WordleTile({
         SIZE_CLASSES[size],
         flipping && "animate-tile-flip",
         bouncing && "animate-tile-bounce",
+        // !important since the tile's own color classes already set a
+        // same-color border (e.g. bg-tile-gray border-tile-gray) — without
+        // it, a dashed border in that same color is nearly invisible.
+        active && "!border-dashed !border-foreground",
         className
       )}
     >

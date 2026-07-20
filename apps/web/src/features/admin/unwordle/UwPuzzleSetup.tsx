@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TileColor } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,13 @@ interface UwPuzzleSetupProps {
   hasSessions?: boolean;
 }
 
+interface RowValidation {
+  rowIndex: number;
+  satisfiable: boolean;
+  sampleWords: string[];
+}
+type ValidationResult = { valid: boolean; rowResults: RowValidation[] };
+
 const NEXT_COLOR: Record<TileColor, TileColor> = { GRAY: "YELLOW", YELLOW: "GREEN", GREEN: "GRAY" };
 
 function emptyPatterns(): TileColor[][] {
@@ -28,9 +35,34 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
   const [editing, setEditing] = useState(false);
   const [solutionWord, setSolutionWord] = useState("");
   const [patterns, setPatterns] = useState<TileColor[][]>(emptyPatterns());
-  const [validation, setValidation] = useState<{ valid: boolean; rowResults: Array<{ rowIndex: number; satisfiable: boolean }> } | null>(null);
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The saved-puzzle view previously just labeled every row "✓ satisfiable"
+  // unconditionally — actually check it against the real dictionary, the
+  // same way the editing form's own "Validate" button does, so a genuinely
+  // unsatisfiable pattern (impossible to reach with any real word) shows up
+  // as broken instead of being rubber-stamped.
+  const [savedValidation, setSavedValidation] = useState<ValidationResult | null>(null);
+  const [savedValidationError, setSavedValidationError] = useState<string | null>(null);
+  const savedPatternsKey = puzzle ? JSON.stringify(puzzle.row_patterns) : null;
+
+  useEffect(() => {
+    if (!puzzle) {
+      setSavedValidation(null);
+      return;
+    }
+    setSavedValidationError(null);
+    apiClient
+      .post<ValidationResult>(`/admin/events/${eventId}/unwordle/puzzle/validate`, {
+        solutionWord: puzzle.solution_word,
+        rowPatterns: puzzle.row_patterns,
+      })
+      .then(setSavedValidation)
+      .catch((err) => setSavedValidationError(err instanceof Error ? err.message : "Could not validate"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, puzzle?.solution_word, savedPatternsKey]);
 
   function cycleTile(row: number, col: number) {
     setPatterns((prev) => {
@@ -113,18 +145,30 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
           <p className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             Player preview — the solution is always shown as a reference row below these 4
           </p>
+          {savedValidationError && <p className="mb-1.5 text-xs text-destructive">{savedValidationError}</p>}
           <div className="space-y-1.5">
-            {puzzle.row_patterns.map((pattern, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
-                <div className="flex gap-1">
-                  {pattern.map((color, j) => (
-                    <WordleTile key={j} size="sm" state="pattern" patternColor={color} />
-                  ))}
+            {puzzle.row_patterns.map((pattern, i) => {
+              const rowResult = savedValidation?.rowResults.find((r) => r.rowIndex === i);
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
+                  <div className="flex gap-1">
+                    {pattern.map((color, j) => (
+                      <WordleTile key={j} size="sm" state="pattern" patternColor={color} />
+                    ))}
+                  </div>
+                  {!rowResult ? (
+                    <span className="text-xs text-muted-foreground">Checking...</span>
+                  ) : rowResult.satisfiable ? (
+                    <span className="text-xs text-success">✓ e.g. {rowResult.sampleWords.join(", ")}</span>
+                  ) : (
+                    <span className="text-xs font-semibold text-destructive">
+                      ✕ no valid dictionary word matches this pattern
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs text-success">✓ satisfiable</span>
-              </div>
-            ))}
+              );
+            })}
             <div className="flex items-center gap-2">
               <span className="w-4" />
               <div className="flex gap-1">
@@ -186,8 +230,8 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
                 ))}
               </div>
               {rowResult && (
-                <span className={rowResult.satisfiable ? "text-xs text-success" : "text-xs text-destructive"}>
-                  {rowResult.satisfiable ? "✓ satisfiable" : "✕ no valid word"}
+                <span className={rowResult.satisfiable ? "text-xs text-success" : "text-xs font-semibold text-destructive"}>
+                  {rowResult.satisfiable ? `✓ e.g. ${rowResult.sampleWords.join(", ")}` : "✕ no valid dictionary word matches this pattern"}
                 </span>
               )}
             </div>

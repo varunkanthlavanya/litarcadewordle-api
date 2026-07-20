@@ -9,20 +9,6 @@ import { CohortUploader, type ParsedCohort } from "@/components/shared/CohortUpl
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { EventWorkspaceContext } from "./EventWorkspaceLayout";
 
-function toIso(localDateTime: string): string | undefined {
-  if (!localDateTime) return undefined;
-  return new Date(localDateTime).toISOString();
-}
-
-/** ISO timestamp -> the value a <input type="datetime-local"> expects
- * (local wall-clock, no timezone/seconds suffix). */
-function toLocalInputValue(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const isLiveStatus = (status: string) => status !== "DRAFT";
 
 export function EventEditPage() {
@@ -30,8 +16,6 @@ export function EventEditPage() {
   const { event, reload } = useOutletContext<EventWorkspaceContext>();
 
   const [name, setName] = useState("");
-  const [roundOpensAt, setRoundOpensAt] = useState("");
-  const [roundClosesAt, setRoundClosesAt] = useState("");
   const [prelimsTopN, setPrelimsTopN] = useState(20);
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
   const [existingCohortCount, setExistingCohortCount] = useState(0);
@@ -45,8 +29,6 @@ export function EventEditPage() {
 
   useEffect(() => {
     setName(event.name);
-    setRoundOpensAt(toLocalInputValue(event.round_opens_at));
-    setRoundClosesAt(toLocalInputValue(event.round_closes_at));
     setPrelimsTopN(event.prelims_top_n ?? 20);
     setPlayoffsWinnerCount(event.playoffs_winner_count ?? 3);
   }, [event]);
@@ -62,8 +44,6 @@ export function EventEditPage() {
     setError(null);
     try {
       await apiClient.post(`/admin/events/${eventId}/config`, {
-        roundOpensAt: toIso(roundOpensAt),
-        roundClosesAt: toIso(roundClosesAt),
         prelimsTopN,
         playoffsWinnerCount,
       });
@@ -119,16 +99,6 @@ export function EventEditPage() {
             <Label htmlFor="name">Event name</Label>
             <Input id="name" value={name} disabled />
             <p className="text-xs text-muted-foreground">Name is set at creation and can't be changed here.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="opensAt">Round opens at</Label>
-              <Input id="opensAt" type="datetime-local" value={roundOpensAt} onChange={(e) => setRoundOpensAt(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="closesAt">Round closes at</Label>
-              <Input id="closesAt" type="datetime-local" value={roundClosesAt} onChange={(e) => setRoundClosesAt(e.target.value)} />
-            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="topN">Prelims cutoff (Top N)</Label>

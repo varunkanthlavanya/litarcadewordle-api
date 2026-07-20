@@ -8,20 +8,10 @@ import { Label } from "@/components/ui/label";
 import { BackLink } from "@/components/shared/BackLink";
 import { CohortUploader, type ParsedCohort } from "@/components/shared/CohortUploader";
 
-/** Local datetime-local input values (no timezone) -> ISO string in the
- * platform's fixed event timezone-of-record is handled server-side; the
- * value posted here is treated as the wall-clock time the admin picked. */
-function toIso(localDateTime: string): string | undefined {
-  if (!localDateTime) return undefined;
-  return new Date(localDateTime).toISOString();
-}
-
 export function EventSetupPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState<"form" | "confirm">("form");
   const [name, setName] = useState("");
-  const [roundOpensAt, setRoundOpensAt] = useState("");
-  const [roundClosesAt, setRoundClosesAt] = useState("");
   const [prelimsTopN, setPrelimsTopN] = useState(20);
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
   const [cohort, setCohort] = useState<ParsedCohort | null>(null);
@@ -30,8 +20,6 @@ export function EventSetupPage() {
 
   const missingFields: string[] = [];
   if (!name.trim()) missingFields.push("event name");
-  if (!roundOpensAt) missingFields.push("round opens at");
-  if (!roundClosesAt) missingFields.push("round closes at");
   if (!prelimsTopN) missingFields.push("prelims cutoff");
   if (!playoffsWinnerCount) missingFields.push("winner count");
   if (!cohort || cohort.players.length === 0) missingFields.push("cohort upload");
@@ -43,8 +31,6 @@ export function EventSetupPage() {
     try {
       const event = await apiClient.post<EventApiRow>("/admin/events", { name });
       await apiClient.post(`/admin/events/${event.id}/config`, {
-        roundOpensAt: toIso(roundOpensAt),
-        roundClosesAt: toIso(roundClosesAt),
         prelimsTopN,
         playoffsWinnerCount,
       });
@@ -78,28 +64,6 @@ export function EventSetupPage() {
             <div className="space-y-2">
               <Label>Timezone</Label>
               <Input value="Asia/Kolkata (IST)" disabled />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="opensAt">Round opens at *</Label>
-                <Input
-                  id="opensAt"
-                  type="datetime-local"
-                  value={roundOpensAt}
-                  onChange={(e) => setRoundOpensAt(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="closesAt">Round closes at *</Label>
-                <Input
-                  id="closesAt"
-                  type="datetime-local"
-                  value={roundClosesAt}
-                  onChange={(e) => setRoundClosesAt(e.target.value)}
-                  required
-                />
-              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="topN">Prelims cutoff (Top N) *</Label>
@@ -149,12 +113,6 @@ export function EventSetupPage() {
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Event name</dt>
                 <dd className="font-medium">{name}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Round window</dt>
-                <dd className="font-medium">
-                  {new Date(roundOpensAt).toLocaleString()} → {new Date(roundClosesAt).toLocaleString()}
-                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Prelims cutoff</dt>

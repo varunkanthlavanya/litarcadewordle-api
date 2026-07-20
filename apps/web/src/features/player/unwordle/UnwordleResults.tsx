@@ -26,7 +26,10 @@ export function UnwordleResults() {
   }, [eventId]);
 
   useEffect(() => {
-    if (!status?.sessionId || status.sessionStatus === "EXITED") return;
+    // A finalist's own session can finish long before everyone else's —
+    // rank must stay hidden until every finalist is done, or it would
+    // visibly shift on the player later as others keep finishing.
+    if (!status?.sessionId || status.sessionStatus === "EXITED" || !status.allFinalistsDone) return;
     apiClient
       .get<UnwordleLeaderboardEntry[]>(`/player/events/${eventId}/unwordle/leaderboard`)
       .then((leaderboard) => {
@@ -103,13 +106,15 @@ export function UnwordleResults() {
         <p className="text-xs text-muted-foreground">Leaderboard rank</p>
         {isExited ? (
           <p className="mt-1 text-lg font-semibold text-muted-foreground">Not ranked</p>
+        ) : !status.allFinalistsDone ? (
+          <p className="mt-1 text-sm text-muted-foreground">Hidden until Playoffs closes for everyone</p>
         ) : rank ? (
           <p className="mt-1 text-3xl font-extrabold">
             #{rank}
             {totalPlayers ? <span className="ml-1 text-sm font-normal text-muted-foreground">of {totalPlayers}</span> : null}
           </p>
         ) : (
-          <p className="mt-1 text-sm text-muted-foreground">Pending</p>
+          <p className="mt-1 text-sm text-muted-foreground">Calculating...</p>
         )}
       </div>
 

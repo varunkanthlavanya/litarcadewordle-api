@@ -426,7 +426,7 @@ Deno.serve(async (req) => {
         const { data: event } = await db.from("wl_events").select("name").eq("id", eventId).maybeSingle();
         if (!event) return json(req, { error: "Event not found" }, 404);
 
-        const notAFinalist = { eventName: event.name, isFinalist: false, sessionId: null, sessionStatus: null, state: null, ended: null };
+        const notAFinalist = { eventName: event.name, isFinalist: false, sessionId: null, sessionStatus: null, state: null, ended: null, allFinalistsDone: false };
 
         const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("*").eq("event_id", eventId).maybeSingle();
         if (!puzzle) return json(req, notAFinalist);
@@ -437,6 +437,14 @@ Deno.serve(async (req) => {
         const { data: rowRows } = await db.from("wl_unwordle_rows").select("*").eq("session_id", sessionRow.id).order("row_index");
         const state = hydrateSession(sessionRow, (rowRows ?? []) as RowRow[], puzzle.solution_word, puzzle.row_patterns);
 
+        // A finalist's own session can finish long before every other
+        // finalist has — rank/leaderboard stays hidden (see `allFinalistsDone`
+        // in the shared type) until every session tied to this puzzle has
+        // reached a terminal state, not just this player's own.
+        const { data: allSessions } = await db.from("wl_unwordle_sessions").select("status").eq("puzzle_id", puzzle.id);
+        const sessions = allSessions ?? [];
+        const allFinalistsDone = sessions.length > 0 && sessions.every((s) => s.status === "COMPLETED" || s.status === "ENDED" || s.status === "EXITED");
+
         if (sessionRow.status === "COMPLETED" || sessionRow.status === "ENDED") {
           return json(req, {
             eventName: event.name,
@@ -445,10 +453,11 @@ Deno.serve(async (req) => {
             sessionStatus: sessionRow.status,
             state: null,
             ended: buildEndedPayload(sessionRow.id, sessionRow.status === "COMPLETED" ? "completed" : "admin_ended", state),
+            allFinalistsDone,
           });
         }
 
-        return json(req, { eventName: event.name, isFinalist: true, sessionId: sessionRow.id, sessionStatus: sessionRow.status, state: toStateDto(state), ended: null });
+        return json(req, { eventName: event.name, isFinalist: true, sessionId: sessionRow.id, sessionStatus: sessionRow.status, state: toStateDto(state), ended: null, allFinalistsDone });
       }
 
       if (action === "leaderboard" && req.method === "GET") {

@@ -64,4 +64,9 @@ export interface UnwordleRoundStatusDto {
   sessionStatus: UnwordleSessionStatus | null;
   state: UnwordleStateDto | null;
   ended: UnwordleSessionEndedPayload | null;
+  /** True once every finalist's UNWORDLE session has reached a terminal
+   * state (completed/ended/exited) — leaderboard rank must stay hidden
+   * until then so a player's position can't visibly shift on them as other
+   * finalists keep finishing throughout the day. */
+  allFinalistsDone: boolean;
 }

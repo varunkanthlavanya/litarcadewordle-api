@@ -93,12 +93,17 @@ export function PlayerDashboard() {
   }, [tw?.roundStatus, eventId]);
 
   useEffect(() => {
-    if (!uw?.isFinalist || uw.sessionStatus === "NOT_STARTED") return;
+    // Same reasoning as the Timed Wordle leaderboard above — don't reveal a
+    // partial ranking while other finalists are still mid-round.
+    if (!uw?.allFinalistsDone) {
+      setUwLeaderboard(null);
+      return;
+    }
     apiClient
       .get<UnwordleLeaderboardEntry[]>(`/player/events/${eventId}/unwordle/leaderboard`)
       .then(setUwLeaderboard)
       .catch(() => {});
-  }, [uw?.isFinalist, uw?.sessionStatus, eventId]);
+  }, [uw?.allFinalistsDone, eventId]);
 
   const opensAtMs = tw?.roundStatus === "SCHEDULED" && tw.roundOpensAt ? new Date(tw.roundOpensAt).getTime() : null;
   const remainingMs = useCountdown(opensAtMs);

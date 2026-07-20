@@ -47,6 +47,11 @@ export interface TimedWordleLeaderboardEntry {
 
 export interface CutoffPreviewRow extends TimedWordleLeaderboardEntry {
   withinCutoff: boolean;
+  /** True if this player is currently advanced to Playoffs in the DB right
+   * now (independent of the topN/manual selection being previewed) — lets
+   * the Cutoff Tool show what's actually already confirmed instead of
+   * resetting to a fresh guess every time the page is revisited. */
+  advancedToPlayoffs: boolean;
 }
 
 export interface TimedWordleRoundStatusDto {

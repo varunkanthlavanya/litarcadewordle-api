@@ -13,7 +13,7 @@ import { compareTimedWordleSessions } from "../_shared/timedWordle/scoring.ts";
 async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: number) {
   const { data: rows } = await db
     .from("wl_timed_wordle_sessions")
-    .select("id, event_player_id, found, cumulative_time_ms, tries_used, tile_score")
+    .select("id, event_player_id, found, cumulative_time_ms, tries_used, tile_score, advanced_to_playoffs")
     .eq("puzzle_id", puzzleId)
     .in("status", ["FOUND", "NOT_FOUND_TRIES", "NOT_FOUND_TIME", "ADMIN_ENDED"]);
 
@@ -24,6 +24,7 @@ async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: nu
     triesUsed: r.tries_used ?? 0,
     tileScore: r.tile_score ?? 0,
     eventPlayerId: r.event_player_id,
+    advancedToPlayoffs: r.advanced_to_playoffs ?? false,
   }));
   rankable.sort(compareTimedWordleSessions);
 
@@ -34,6 +35,7 @@ async function getLeaderboard(db: ReturnType<typeof supabaseAdmin>, puzzleId: nu
     cumulativeTimeMs: r.cumulativeTimeMs,
     triesUsed: r.triesUsed,
     tileScore: r.tileScore,
+    advancedToPlayoffs: r.advancedToPlayoffs,
     rank: index + 1,
   }));
 }
@@ -68,8 +70,10 @@ Deno.serve(async (req) => {
 
       const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
       if (!twPuzzle) return json(req, { error: "No Timed Wordle puzzle exists for this event yet" }, 400);
-      const { data: uwPuzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
-      if (!uwPuzzle) return json(req, { error: "Create the UNWORDLE puzzle before advancing players to Playoffs" }, 400);
+      // The UNWORDLE puzzle no longer has to exist yet — wl_confirm_cutoff
+      // marks who's advancing regardless, and provisions their UNWORDLE
+      // sessions immediately if the puzzle's already there, or later (via
+      // wl_provision_unwordle_sessions) the moment it's created/published.
 
       const leaderboard = await getLeaderboard(db, twPuzzle.id);
       const advancing = leaderboard.filter((e) => eventPlayerIds.includes(e.eventPlayerId));

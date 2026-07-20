@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import type { CutoffPreviewRow, EventPlayerApiRow } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { formatMmSs } from "@/hooks/useCountdown";
 import { cn } from "@/lib/utils";
+import type { EventWorkspaceContext } from "../events/EventWorkspaceLayout";
 
 export function CutoffToolPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const [topN, setTopN] = useState(20);
+  const { event } = useOutletContext<EventWorkspaceContext>();
+  // Default to whatever "Prelims cutoff (Top N)" was configured for this
+  // event, not a hardcoded 20 — a cohort of 10 finishers defaulting to a
+  // stale/generic 20 silently includes everyone, which read as "the
+  // exclude/topN controls don't work" even though they did exactly what
+  // was asked (just not what the admin was expecting to be pre-filled).
+  const [topN, setTopN] = useState(event.prelims_top_n ?? 20);
   const [preview, setPreview] = useState<CutoffPreviewRow[] | null>(null);
   const [cohort, setCohort] = useState<EventPlayerApiRow[]>([]);
   const [manualAdd, setManualAdd] = useState<Set<number>>(new Set());
   const [manualRemove, setManualRemove] = useState<Set<number>>(new Set());
+  const [seeded, setSeeded] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +39,21 @@ export function CutoffToolPage() {
       .then(setPreview)
       .catch((err) => setError(err instanceof Error ? err.message : "Could not load preview"));
   }, [eventId, topN]);
+
+  // One-time seed (per page visit) from what's actually already been
+  // confirmed in the DB — so a player advanced earlier via a manual
+  // "+ include" (or a since-changed Top N) still shows as included when the
+  // admin comes back to this tab, instead of the selection silently
+  // resetting to a fresh rank<=topN guess every time.
+  useEffect(() => {
+    if (!preview || seeded) return;
+    const add = new Set<number>();
+    preview.forEach((r) => {
+      if (r.advancedToPlayoffs && !r.withinCutoff) add.add(r.eventPlayerId);
+    });
+    setManualAdd(add);
+    setSeeded(true);
+  }, [preview, seeded]);
 
   const playerName = (id: number) => {
     const p = cohort.find((c) => c.id === id);
@@ -122,12 +145,22 @@ export function CutoffToolPage() {
                     <TableCell>{row.triesUsed}</TableCell>
                     <TableCell>{row.tileScore}</TableCell>
                     <TableCell>
-                      {!row.withinCutoff && !manualAdd.has(row.eventPlayerId) && (
+                      {!row.withinCutoff && (
                         <button
-                          className="text-xs font-medium text-primary hover:underline"
-                          onClick={() => setManualAdd((prev) => new Set(prev).add(row.eventPlayerId))}
+                          className={cn(
+                            "text-xs font-medium hover:underline",
+                            manualAdd.has(row.eventPlayerId) ? "text-destructive" : "text-primary"
+                          )}
+                          onClick={() =>
+                            setManualAdd((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(row.eventPlayerId)) next.delete(row.eventPlayerId);
+                              else next.add(row.eventPlayerId);
+                              return next;
+                            })
+                          }
                         >
-                          + include
+                          {manualAdd.has(row.eventPlayerId) ? "− remove" : "+ include"}
                         </button>
                       )}
                       {row.withinCutoff && (

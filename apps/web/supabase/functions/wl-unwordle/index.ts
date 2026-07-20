@@ -253,6 +253,11 @@ Deno.serve(async (req) => {
           targetType: "unwordle_puzzle",
           targetIds: [puzzle.id],
         });
+
+        // Catches up any player already advanced via the Cutoff Tool before
+        // this puzzle existed — no need to re-run cutoff after creating it.
+        await db.rpc("wl_provision_unwordle_sessions", { p_event_id: eventId });
+
         return json(req, { puzzle, validation }, existing ? 200 : 201);
       }
 
@@ -284,6 +289,10 @@ Deno.serve(async (req) => {
       if (action === "sessions" && req.method === "GET") {
         const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
         if (!puzzle) return json(req, []);
+
+        // Defensive catch-up for any advanced player still missing a
+        // session — covers cutoff-before-puzzle, and any other ordering.
+        await db.rpc("wl_provision_unwordle_sessions", { p_event_id: eventId });
 
         const { data: rows } = await db
           .from("wl_unwordle_sessions")

@@ -253,7 +253,15 @@ export function PlayerDashboard() {
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
                 <Badge variant="info" className="w-fit">In progress</Badge>
                 <Button asChild className="w-full">
-                  <Link to={`/play/${eventId}/unwordle/game`}>Resume</Link>
+                  {/* IN_PROGRESS here means the admin has started the session,
+                      not that this player has actually opened the game yet —
+                      those are two different moments for UNWORDLE (unlike
+                      Timed Wordle, where the player's own action is what
+                      starts it). Zero attempts means they've never actually
+                      submitted a guess, so "Resume" would be misleading. */}
+                  <Link to={`/play/${eventId}/unwordle/game`}>
+                    {uw.state?.totalAttempts === 0 ? "Start" : "Resume"}
+                  </Link>
                 </Button>
               </div>
             ) : (

@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { WordleTile } from "@/components/shared/WordleTile";
 import { Badge } from "@/components/ui/badge";
-import { isTargetPattern, orderRowsForDisplay } from "@/lib/unwordleRows";
 
 interface UwPuzzleSetupProps {
   eventId: number;
@@ -112,31 +111,29 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
         </div>
         <div className="mt-4">
           <p className="mb-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-            Player preview — target row always shown last, exactly as players see it
+            Player preview — the solution is always shown as a reference row below these 4
           </p>
           <div className="space-y-1.5">
-            {orderRowsForDisplay(puzzle.row_patterns, (p) => p).map((pattern, i) => {
-              const isTarget = isTargetPattern(pattern);
-              return (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
-                  <div className="flex gap-1">
-                    {pattern.map((color, j) => (
-                      <WordleTile
-                        key={j}
-                        size="sm"
-                        state="pattern"
-                        patternColor={color}
-                        letter={isTarget ? puzzle.solution_word[j] : undefined}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-xs text-success">
-                    {isTarget ? "✓ target — auto-revealed to players" : "✓ satisfiable"}
-                  </span>
+            {puzzle.row_patterns.map((pattern, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
+                <div className="flex gap-1">
+                  {pattern.map((color, j) => (
+                    <WordleTile key={j} size="sm" state="pattern" patternColor={color} />
+                  ))}
                 </div>
-              );
-            })}
+                <span className="text-xs text-success">✓ satisfiable</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <span className="w-4" />
+              <div className="flex gap-1">
+                {puzzle.solution_word.split("").map((letter, j) => (
+                  <WordleTile key={j} size="sm" state="correct" letter={letter} />
+                ))}
+              </div>
+              <span className="text-xs text-success">✓ reference — always shown to players</span>
+            </div>
           </div>
         </div>
       </div>
@@ -178,7 +175,6 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
       <div className="space-y-1.5">
         {patterns.map((pattern, i) => {
           const rowResult = validation?.rowResults.find((r) => r.rowIndex === i);
-          const isTarget = isTargetPattern(pattern);
           return (
             <div key={i} className="flex items-center gap-2">
               <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
@@ -189,22 +185,18 @@ export function UwPuzzleSetup({ eventId, puzzle, onChanged, hasSessions }: UwPuz
                   </button>
                 ))}
               </div>
-              {isTarget ? (
-                <Badge variant="success">Target — auto-revealed, shown last to players</Badge>
-              ) : (
-                rowResult && (
-                  <span className={rowResult.satisfiable ? "text-xs text-success" : "text-xs text-destructive"}>
-                    {rowResult.satisfiable ? "✓ satisfiable" : "✕ no valid word"}
-                  </span>
-                )
+              {rowResult && (
+                <span className={rowResult.satisfiable ? "text-xs text-success" : "text-xs text-destructive"}>
+                  {rowResult.satisfiable ? "✓ satisfiable" : "✕ no valid word"}
+                </span>
               )}
             </div>
           );
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        Click a tile to cycle gray → yellow → green. An all-green row becomes the target row — auto-revealed to
-        players as the reference answer, and always shown last regardless of its position here.
+        Click a tile to cycle gray → yellow → green. Players always see the solution word as a fixed reference row —
+        these 4 rows can use any pattern, no need to set one all-green anymore.
       </p>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>

@@ -133,6 +133,7 @@ function buildEndedPayload(sessionId: number, reason: "completed" | "admin_ended
   return {
     sessionId,
     reason,
+    solutionWord: session.solution,
     revealedAnswers: session.rows.map((r) => {
       if (r.solvedWord) return r.solvedWord;
       return checkRowSatisfiability(session.solution, r.pattern, VALID_GUESS_WORDS, 1).sampleWords[0] ?? "";
@@ -156,6 +157,7 @@ function toStateDto(state: UnwordleSession) {
     totalTimeMs: state.totalTimeMs,
     totalAttempts: state.totalAttempts,
     totalInvalidSubmissions: state.totalInvalidSubmissions,
+    solutionWord: state.solution,
   };
 }
 

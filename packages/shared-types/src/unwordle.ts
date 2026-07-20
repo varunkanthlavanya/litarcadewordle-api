@@ -20,6 +20,12 @@ export interface UnwordleStateDto {
   totalTimeMs: number;
   totalAttempts: number;
   totalInvalidSubmissions: number;
+  /** The actual solution word — always sent regardless of row patterns, so
+   * the player always has a fixed green reference row to work backward
+   * from. Previously this only appeared when an admin happened to set one
+   * of the 4 rows to an all-GREEN pattern (an easy-to-miss manual step);
+   * now it's unconditional. */
+  solutionWord: string;
 }
 
 export interface UnwordleLeaderboardEntry {
@@ -36,6 +42,7 @@ export interface UnwordleLeaderboardEntry {
 export interface UnwordleSessionEndedPayload {
   sessionId: number;
   reason: "completed" | "admin_ended";
+  solutionWord: string;
   revealedAnswers: string[];
   summary: {
     rowsSolvedCount: number;

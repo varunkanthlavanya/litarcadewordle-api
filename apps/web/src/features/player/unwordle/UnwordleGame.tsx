@@ -4,8 +4,8 @@ import type { TileColor, UnwordleRoundStatusDto, UnwordleRowDto, UnwordleStateDt
 import { apiClient } from "@/lib/apiClient";
 import { Keyboard } from "@/components/shared/Keyboard";
 import { formatHhMmSsFromElapsed, useStopwatch } from "@/hooks/useStopwatch";
-import { orderRowsForDisplay } from "@/lib/unwordleRows";
 import { UnwordleRow } from "./UnwordleRow";
+import { UnwordleTargetRow } from "./UnwordleTargetRow";
 
 const WORD_LENGTH = 5;
 const COLOR_RANK: Record<TileColor, number> = { GRAY: 0, YELLOW: 1, GREEN: 2 };
@@ -26,9 +26,14 @@ const POLL_MS = 3000;
  * revealed by a guess — so once a row is solved, its letters tell you the
  * color that letter earns wherever it appears (best color wins, same
  * merge rule as Timed Wordle's keyboard). This is what colors the on-screen
- * keyboard as rows get solved. */
-function computeLetterStatus(rows: UnwordleRowDto[]): Record<string, TileColor | undefined> {
+ * keyboard as rows get solved. The solution word's own letters are seeded
+ * in as GREEN up front, since the answer row already shows them — nothing
+ * can ever downgrade a GREEN, so this is purely additive. */
+function computeLetterStatus(rows: UnwordleRowDto[], solutionWord: string): Record<string, TileColor | undefined> {
   const status: Record<string, TileColor | undefined> = {};
+  for (const letter of solutionWord) {
+    status[letter] = "GREEN";
+  }
   for (const row of rows) {
     if (!row.solved || !row.solvedWord) continue;
     for (let i = 0; i < row.solvedWord.length; i++) {
@@ -47,10 +52,6 @@ export function UnwordleGame() {
   const navigate = useNavigate();
   const [state, setState] = useState<UnwordleStateDto | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
-  // Tracks the row's stable `rowIndex` (its identity), not its position in
-  // the display list — the target/reference row is always rendered last
-  // (see `displayRows` below) regardless of where its rowIndex falls, so
-  // array position and rowIndex diverge once that reordering happens.
   const [selectedRow, setSelectedRow] = useState(0);
   const [currentGuess, setCurrentGuess] = useState("");
   const [rejection, setRejection] = useState<string | null>(null);
@@ -101,11 +102,6 @@ export function UnwordleGame() {
   }, [eventId, navigate]);
 
   const elapsedMs = useStopwatch(state?.startTime ?? null);
-
-  // The target/reference row (all-GREEN pattern) is always rendered last,
-  // like a fixed answer key at the bottom of the board, regardless of which
-  // rowIndex the admin happened to set it up as.
-  const displayRows = useMemo(() => orderRowsForDisplay(state?.rows ?? [], (r) => r.pattern), [state?.rows]);
 
   const selectedRowSolved = state?.rows.find((r) => r.rowIndex === selectedRow)?.solved ?? false;
 
@@ -188,7 +184,10 @@ export function UnwordleGame() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedRowSolved, handleSubmit, handleBackspace, handleKey]);
 
-  const letterStatus = useMemo(() => computeLetterStatus(state?.rows ?? []), [state?.rows]);
+  const letterStatus = useMemo(
+    () => computeLetterStatus(state?.rows ?? [], state?.solutionWord ?? ""),
+    [state?.rows, state?.solutionWord]
+  );
 
   if (loadError) {
     return (
@@ -218,7 +217,7 @@ export function UnwordleGame() {
 
       <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
         <div className="flex flex-col gap-2">
-          {displayRows.map((row) => (
+          {state.rows.map((row) => (
             <UnwordleRow
               key={row.rowIndex}
               row={row}
@@ -229,14 +228,12 @@ export function UnwordleGame() {
               shake={row.rowIndex === shakeRow}
             />
           ))}
+          <UnwordleTargetRow solutionWord={state.solutionWord} />
         </div>
 
         <div className="flex flex-col items-center gap-2 text-center">
           {!selectedRowSolved && (
-            <p className="text-xs text-muted-foreground">
-              Row {displayRows.findIndex((r) => r.rowIndex === selectedRow) + 1} · type a 5-letter word matching this
-              pattern
-            </p>
+            <p className="text-xs text-muted-foreground">Row {selectedRow + 1} · type a 5-letter word matching this pattern</p>
           )}
           {rejection && (
             <p className="rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-background">

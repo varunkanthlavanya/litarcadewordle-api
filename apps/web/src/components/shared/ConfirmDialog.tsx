@@ -32,24 +32,34 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleOpenChange(next: boolean) {
+    if (!submitting) setError(null);
+    onOpenChange(next);
+  }
 
   async function handleConfirm() {
     setSubmitting(true);
+    setError(null);
     try {
       await onConfirm();
       onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel

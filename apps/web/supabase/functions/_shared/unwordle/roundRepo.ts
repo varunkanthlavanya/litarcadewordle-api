@@ -128,22 +128,30 @@ export async function persistRow(db: ReturnType<typeof supabaseAdmin>, sessionId
 /** Creates and immediately starts a player's session for one bank puzzle —
  * used both by round/start (bulk, puzzle #1 for every advanced player) and
  * by the single-player auto-advance/resume paths. Every session is born
- * IN_PROGRESS in the continuous-round model; there is no admin-triggered
- * per-puzzle start anymore. */
+ * IN_PROGRESS, UNLESS every one of its rows is a freebie (all-Green) — in
+ * that degenerate case there's nothing left for the player to submit, so
+ * the session must be born already COMPLETED. Without this, a fully-freebie
+ * puzzle would silently strand a player forever: no valid guess can ever
+ * trigger the "all rows solved" transition, since every row already reads
+ * solved the instant the session exists. */
 export async function createAndStartSession(
   db: ReturnType<typeof supabaseAdmin>,
   puzzle: BankPuzzleRow,
   eventPlayerId: number,
   now: number
-): Promise<number> {
+): Promise<{ sessionId: number; autoCompleted: boolean }> {
   const { freebieRows, freebieCount } = computeFreebieRows(puzzle.row_patterns);
+  const autoCompleted = freebieCount === puzzle.row_patterns.length;
+  const nowIso = new Date(now).toISOString();
+
   const { data: session, error } = await db
     .from("wl_unwordle_sessions")
     .insert({
       puzzle_id: puzzle.id,
       event_player_id: eventPlayerId,
-      status: "IN_PROGRESS",
-      start_time: new Date(now).toISOString(),
+      status: autoCompleted ? "COMPLETED" : "IN_PROGRESS",
+      start_time: nowIso,
+      stop_time: autoCompleted ? nowIso : null,
       rows_solved_count: freebieCount,
     })
     .select("id")
@@ -160,7 +168,38 @@ export async function createAndStartSession(
   );
   if (rowsError) throw rowsError;
 
-  return session.id;
+  return { sessionId: session.id, autoCompleted };
+}
+
+/** Wraps createAndStartSession for the single-player entry points
+ * (row/submit's auto-advance, round/resume): if the puzzle it lands on
+ * turns out fully-freebie (auto-completed with nothing to play), it keeps
+ * advancing on the player's behalf until it reaches a real playable puzzle
+ * or runs out of bank — a player should never be shown a "puzzle" with
+ * every row already solved and nothing left to do. */
+export async function createAndStartSessionCascading(
+  db: ReturnType<typeof supabaseAdmin>,
+  eventId: number,
+  startPuzzleNumber: number,
+  bankSize: number,
+  eventPlayerId: number,
+  now: number
+): Promise<{ sessionId: number; puzzleNumber: number } | { bankExhausted: true }> {
+  let puzzleNumber = startPuzzleNumber;
+  while (puzzleNumber <= bankSize) {
+    const { data: puzzle } = await db
+      .from("wl_unwordle_puzzles")
+      .select("*")
+      .eq("event_id", eventId)
+      .eq("puzzle_number", puzzleNumber)
+      .maybeSingle<BankPuzzleRow>();
+    if (!puzzle) return { bankExhausted: true };
+
+    const { sessionId, autoCompleted } = await createAndStartSession(db, puzzle, eventPlayerId, now);
+    if (!autoCompleted) return { sessionId, puzzleNumber };
+    puzzleNumber++;
+  }
+  return { bankExhausted: true };
 }
 
 /** Lazily reconciles one player's round against the event's authoritative

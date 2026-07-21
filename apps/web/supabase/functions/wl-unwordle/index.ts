@@ -19,7 +19,7 @@ import { checkRowSatisfiability, validatePuzzlePatterns } from "../_shared/unwor
 import type { TileColor } from "../_shared/unwordle/validation.ts";
 import {
   computeFreebieRows,
-  createAndStartSession,
+  createAndStartSessionCascading,
   hydrateSession,
   loadSessionAndPuzzle,
   persistRow,
@@ -470,8 +470,9 @@ Deno.serve(async (req) => {
           return json(req, { error: `Bank only has ${publishedCount ?? 0}/${bankSize} puzzles published — publish the full bank before starting the round` }, 400);
         }
 
-        const { data: puzzle1 } = await db.from("wl_unwordle_puzzles").select("*").eq("event_id", eventId).eq("puzzle_number", 1).maybeSingle<BankPuzzleRow>();
-        if (!puzzle1) return json(req, { error: "Puzzle 1 not found in the bank" }, 400);
+        const { data: bankPuzzles } = await db.from("wl_unwordle_puzzles").select("*").eq("event_id", eventId).order("puzzle_number");
+        if (!bankPuzzles || bankPuzzles.length === 0) return json(req, { error: "Puzzle 1 not found in the bank" }, 400);
+        const puzzleIds = bankPuzzles.map((p) => p.id);
 
         const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
         if (!twPuzzle) return json(req, { error: "No Timed Wordle puzzle exists for this event yet" }, 400);
@@ -483,43 +484,99 @@ Deno.serve(async (req) => {
         const advancedIds = (advancedRows ?? []).map((r) => r.event_player_id);
         if (advancedIds.length === 0) return json(req, { error: "No players have been advanced to Playoffs yet" }, 400);
 
-        // Idempotent retry safety — skip anyone who already has a puzzle-1
-        // session (a retried/duplicate Start Round call must not double-up).
-        const { data: existingP1 } = await db.from("wl_unwordle_sessions").select("event_player_id").eq("puzzle_id", puzzle1.id);
-        const alreadyStarted = new Set((existingP1 ?? []).map((r) => r.event_player_id));
+        // Idempotent retry safety — skip anyone who already has ANY session
+        // in this event's bank (a retried/duplicate Start Round call must
+        // not double-up).
+        const { data: existingSessions } = await db.from("wl_unwordle_sessions").select("event_player_id").in("puzzle_id", puzzleIds);
+        const alreadyStarted = new Set((existingSessions ?? []).map((r) => r.event_player_id));
         const toStart = advancedIds.filter((id) => !alreadyStarted.has(id));
 
         const now = Date.now();
-        const { freebieRows, freebieCount } = computeFreebieRows(puzzle1.row_patterns);
+        const nowIso = new Date(now).toISOString();
 
         if (toStart.length > 0) {
-          const nowIso = new Date(now).toISOString();
-          const { data: insertedSessions, error: sessionError } = await db
-            .from("wl_unwordle_sessions")
-            .insert(
-              toStart.map((eventPlayerId) => ({
-                puzzle_id: puzzle1.id,
-                event_player_id: eventPlayerId,
-                status: "IN_PROGRESS",
-                start_time: nowIso,
-                rows_solved_count: freebieCount,
-              }))
-            )
-            .select("id");
-          if (sessionError) return json(req, { error: sessionError.message }, 400);
-
-          const rowsToInsert = (insertedSessions ?? []).flatMap((s) =>
-            Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
-              session_id: s.id,
-              row_index: rowIndex,
-              solved: freebieRows[rowIndex],
-              solved_word: freebieRows[rowIndex] ? puzzle1.solution_word : null,
-            }))
-          );
-          if (rowsToInsert.length > 0) {
-            const { error: rowsError } = await db.from("wl_unwordle_rows").insert(rowsToInsert);
-            if (rowsError) return json(req, { error: rowsError.message }, 400);
+          // Every puzzle whose 4 rows are all freebie (all-Green) has
+          // nothing for a player to actually do — it's born already
+          // COMPLETED for everyone, and the round only really begins at the
+          // first puzzle with real rows to solve. This is the bulk-path
+          // equivalent of createAndStartSessionCascading, sized for
+          // hundreds of players at once rather than looping per player.
+          const skippedPuzzles: (typeof bankPuzzles)[number][] = [];
+          let startPuzzle: (typeof bankPuzzles)[number] | null = null;
+          for (const p of bankPuzzles) {
+            const { freebieCount } = computeFreebieRows(p.row_patterns);
+            if (freebieCount === p.row_patterns.length) {
+              skippedPuzzles.push(p);
+            } else {
+              startPuzzle = p;
+              break;
+            }
           }
+
+          for (const p of skippedPuzzles) {
+            const { freebieRows, freebieCount } = computeFreebieRows(p.row_patterns);
+            const { data: insertedSessions, error: sessionError } = await db
+              .from("wl_unwordle_sessions")
+              .insert(
+                toStart.map((eventPlayerId) => ({
+                  puzzle_id: p.id,
+                  event_player_id: eventPlayerId,
+                  status: "COMPLETED",
+                  start_time: nowIso,
+                  stop_time: nowIso,
+                  rows_solved_count: freebieCount,
+                }))
+              )
+              .select("id");
+            if (sessionError) return json(req, { error: sessionError.message }, 400);
+
+            const rowsToInsert = (insertedSessions ?? []).flatMap((s) =>
+              Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
+                session_id: s.id,
+                row_index: rowIndex,
+                solved: freebieRows[rowIndex],
+                solved_word: freebieRows[rowIndex] ? p.solution_word : null,
+              }))
+            );
+            if (rowsToInsert.length > 0) {
+              const { error: rowsError } = await db.from("wl_unwordle_rows").insert(rowsToInsert);
+              if (rowsError) return json(req, { error: rowsError.message }, 400);
+            }
+          }
+
+          if (startPuzzle) {
+            const { freebieRows, freebieCount } = computeFreebieRows(startPuzzle.row_patterns);
+            const { data: insertedSessions, error: sessionError } = await db
+              .from("wl_unwordle_sessions")
+              .insert(
+                toStart.map((eventPlayerId) => ({
+                  puzzle_id: startPuzzle!.id,
+                  event_player_id: eventPlayerId,
+                  status: "IN_PROGRESS",
+                  start_time: nowIso,
+                  rows_solved_count: freebieCount,
+                }))
+              )
+              .select("id");
+            if (sessionError) return json(req, { error: sessionError.message }, 400);
+
+            const rowsToInsert = (insertedSessions ?? []).flatMap((s) =>
+              Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
+                session_id: s.id,
+                row_index: rowIndex,
+                solved: freebieRows[rowIndex],
+                solved_word: freebieRows[rowIndex] ? startPuzzle!.solution_word : null,
+              }))
+            );
+            if (rowsToInsert.length > 0) {
+              const { error: rowsError } = await db.from("wl_unwordle_rows").insert(rowsToInsert);
+              if (rowsError) return json(req, { error: rowsError.message }, 400);
+            }
+          }
+          // If every puzzle in the bank is fully-freebie (startPuzzle stays
+          // null), toStart players simply end up with only COMPLETED
+          // sessions and no active one — they'll correctly show as
+          // BANK_EXHAUSTED the moment anything reads their status.
         }
 
         const roundDurationMs = typeof body.roundDurationMs === "number" && body.roundDurationMs > 0 ? body.roundDurationMs : event.unwordle_round_duration_ms;
@@ -609,24 +666,19 @@ Deno.serve(async (req) => {
           return json(req, { error: "Already finished the whole bank — nothing to resume" }, 400);
         }
 
-        const { data: nextPuzzle } = await db
-          .from("wl_unwordle_puzzles")
-          .select("*")
-          .eq("event_id", eventId)
-          .eq("puzzle_number", latest.puzzleNumber + 1)
-          .maybeSingle<BankPuzzleRow>();
-        if (!nextPuzzle) return json(req, { error: "Next puzzle not found in the bank" }, 400);
-
-        const sessionId = await createAndStartSession(db, nextPuzzle, targetPlayerId, now);
+        const resumed = await createAndStartSessionCascading(db, eventId, latest.puzzleNumber + 1, event.unwordle_bank_size, targetPlayerId, now);
+        if ("bankExhausted" in resumed) {
+          return json(req, { error: "Every remaining puzzle was already fully solved — nothing left to resume into" }, 400);
+        }
         await writeAuditEntry(db, {
           adminLabel: admin.nameLabel,
           eventId,
           actionType: "UNWORDLE_PLAYER_RESUMED",
           targetType: "event_player",
           targetIds: [targetPlayerId],
-          metadata: { puzzleNumber: nextPuzzle.puzzle_number },
+          metadata: { puzzleNumber: resumed.puzzleNumber },
         });
-        return json(req, { ok: true, sessionId, puzzleNumber: nextPuzzle.puzzle_number });
+        return json(req, { ok: true, sessionId: resumed.sessionId, puzzleNumber: resumed.puzzleNumber });
       }
 
       if (action === "sessions" && req.method === "GET") {
@@ -826,25 +878,20 @@ Deno.serve(async (req) => {
 
           if (outcome.kind === "ACCEPTED" && outcome.puzzleCompleted) {
             if (puzzleNumber < bankSize) {
-              const { data: nextPuzzle } = await db
-                .from("wl_unwordle_puzzles")
-                .select("*")
-                .eq("event_id", eventId)
-                .eq("puzzle_number", puzzleNumber + 1)
-                .maybeSingle<BankPuzzleRow>();
-              if (!nextPuzzle) {
-                // Shouldn't happen (bank was validated complete at publish
-                // time) — fail safe as bank-exhausted rather than crash.
+              // Cascades past any fully-freebie puzzle it lands on (nothing
+              // to actually play there), landing on the next real puzzle or
+              // exhausting the bank.
+              const advanced = await createAndStartSessionCascading(db, eventId, puzzleNumber + 1, bankSize, player.eventPlayerId, Date.now());
+              if ("bankExhausted" in advanced) {
                 return json(req, { outcome, roundOutcome: "BANK_EXHAUSTED", sessionId, state: null, puzzleNumber, bankSize, roundEndsAt: roundEndsAtMs });
               }
-              const nextSessionId = await createAndStartSession(db, nextPuzzle, player.eventPlayerId, Date.now());
-              const nextLoaded = await loadSessionAndPuzzle(db, nextSessionId);
+              const nextLoaded = await loadSessionAndPuzzle(db, advanced.sessionId);
               return json(req, {
                 outcome,
                 roundOutcome: "ADVANCED",
-                sessionId: nextSessionId,
+                sessionId: advanced.sessionId,
                 state: nextLoaded ? toStateDto(nextLoaded.state) : null,
-                puzzleNumber: nextPuzzle.puzzle_number,
+                puzzleNumber: advanced.puzzleNumber,
                 bankSize,
                 roundEndsAt: roundEndsAtMs,
               });

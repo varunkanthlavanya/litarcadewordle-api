@@ -15,7 +15,7 @@ export function corsHeaders(origin: string | null): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": matched,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     Vary: "Origin",
   };
 }

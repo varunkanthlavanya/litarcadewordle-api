@@ -13,11 +13,13 @@ import { useCountdown, formatMmSs } from "@/hooks/useCountdown";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { UnwordleBankUploader } from "@/components/shared/UnwordleBankUploader";
+import { UnwordleManualPuzzleForm } from "@/components/shared/UnwordleManualPuzzleForm";
 import { UnwordleTilePreviewGrid } from "@/components/shared/UnwordleTilePreviewGrid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { EventWorkspaceContext } from "../events/EventWorkspaceLayout";
 
 const MONITOR_BADGE: Record<UnwordleMonitorState, { status: StatusBadgeStatus; label: string }> = {
@@ -148,7 +150,18 @@ export function UnwordleAdminPanel() {
             </div>
           </div>
 
-          <UnwordleBankUploader eventId={id} onUploaded={handleBankUploaded} />
+          <Tabs defaultValue="bulk">
+            <TabsList>
+              <TabsTrigger value="bulk">Bulk Upload</TabsTrigger>
+              <TabsTrigger value="manual">Manual Tile Coloring</TabsTrigger>
+            </TabsList>
+            <TabsContent value="bulk">
+              <UnwordleBankUploader eventId={id} onUploaded={handleBankUploaded} />
+            </TabsContent>
+            <TabsContent value="manual">
+              <UnwordleManualPuzzleForm eventId={id} bankSize={bank.bankSize} existingPuzzles={bank.puzzles} onSaved={loadBank} />
+            </TabsContent>
+          </Tabs>
 
           <UnwordleTilePreviewGrid puzzles={bank.puzzles} />
 

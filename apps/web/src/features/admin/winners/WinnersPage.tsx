@@ -5,7 +5,6 @@ import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
 import { cn } from "@/lib/utils";
 
 const WINNER_COUNT = 5;
@@ -48,8 +47,8 @@ export function WinnersPage() {
   }
 
   function handleExport() {
-    const rows = leaderboard.map((e) => [e.rank, playerName(e.eventPlayerId), e.rowsSolvedCount, e.totalTimeMs, places[e.eventPlayerId] ?? ""]);
-    const csv = ["rank,player,rows,time_ms,place", ...rows.map((r) => r.join(","))].join("\n");
+    const rows = leaderboard.map((e) => [e.rank, playerName(e.eventPlayerId), e.totalPoints, e.totalPuzzlesCompleted, places[e.eventPlayerId] ?? ""]);
+    const csv = ["rank,player,points,puzzles_completed,place", ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -68,8 +67,8 @@ export function WinnersPage() {
             <TableRow>
               <TableHead>Rank</TableHead>
               <TableHead>Player</TableHead>
-              <TableHead>Rows</TableHead>
-              <TableHead>Time</TableHead>
+              <TableHead>Points</TableHead>
+              <TableHead>Puzzles completed</TableHead>
               <TableHead>Place</TableHead>
             </TableRow>
           </TableHeader>
@@ -77,11 +76,11 @@ export function WinnersPage() {
             {leaderboard.map((entry) => {
               const place = places[entry.eventPlayerId];
               return (
-                <TableRow key={entry.sessionId} className={cn(place === 1 && "bg-accent/15")}>
+                <TableRow key={entry.eventPlayerId} className={cn(place === 1 && "bg-accent/15")}>
                   <TableCell>{entry.rank}</TableCell>
                   <TableCell>{playerName(entry.eventPlayerId)}</TableCell>
-                  <TableCell>{entry.rowsSolvedCount} / 4</TableCell>
-                  <TableCell className="font-mono">{formatHhMmSsFromElapsed(entry.totalTimeMs)}</TableCell>
+                  <TableCell className="font-mono">{entry.totalPoints}</TableCell>
+                  <TableCell>{entry.totalPuzzlesCompleted}</TableCell>
                   <TableCell>
                     <Select
                       value={place ? String(place) : "none"}

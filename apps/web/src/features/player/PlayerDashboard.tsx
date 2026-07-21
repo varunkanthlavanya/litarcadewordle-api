@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatHhMmSs, formatMmSs, useCountdown } from "@/hooks/useCountdown";
-import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 10_000;
@@ -94,8 +93,8 @@ export function PlayerDashboard() {
 
   useEffect(() => {
     // Same reasoning as the Timed Wordle leaderboard above — don't reveal a
-    // partial ranking while other finalists are still mid-round.
-    if (!uw?.allFinalistsDone) {
+    // partial ranking while the round is still going for anyone.
+    if (!uw?.roundEnded) {
       setUwLeaderboard(null);
       return;
     }
@@ -103,7 +102,7 @@ export function PlayerDashboard() {
       .get<UnwordleLeaderboardEntry[]>(`/player/events/${eventId}/unwordle/leaderboard`)
       .then(setUwLeaderboard)
       .catch(() => {});
-  }, [uw?.allFinalistsDone, eventId]);
+  }, [uw?.roundEnded, eventId]);
 
   const opensAtMs = tw?.roundStatus === "SCHEDULED" && tw.roundOpensAt ? new Date(tw.roundOpensAt).getTime() : null;
   const remainingMs = useCountdown(opensAtMs);
@@ -223,52 +222,65 @@ export function PlayerDashboard() {
               <Badge variant="secondary">Playoffs</Badge>
             </div>
 
-            {!uw || !uw.isFinalist ? (
+            {!uw || uw.playerState === "NOT_A_FINALIST" ? (
               <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
                 <Lock className="h-5 w-5 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Only Prelims finalists advance to Playoffs</p>
               </div>
-            ) : uw.ended ? (
-              <div className="mt-3 flex-1 space-y-3">
-                <div className="rounded-md border bg-muted/40 p-3 text-center">
-                  <p className="text-xs font-bold uppercase text-muted-foreground">
-                    {uw.ended.summary.rowsSolvedCount} / 4 rows solved
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div>
-                    <p className="font-mono font-bold">{formatHhMmSsFromElapsed(uw.ended.summary.totalTimeMs)}</p>
-                    <p className="text-muted-foreground">time</p>
-                  </div>
-                  <div>
-                    <p className="font-mono font-bold">{uw.ended.summary.totalAttempts}</p>
-                    <p className="text-muted-foreground">attempts</p>
-                  </div>
-                </div>
-                <Button asChild variant="outline" className="w-full">
-                  <Link to={`/play/${eventId}/unwordle/results`}>View full result</Link>
-                </Button>
+            ) : uw.playerState === "AWAITING_ROUND_START" ? (
+              <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+                <Badge variant="accent" className="w-fit">You're a finalist</Badge>
+                <p className="text-sm text-muted-foreground">Waiting for the admin to start your round</p>
               </div>
-            ) : uw.sessionStatus === "IN_PROGRESS" ? (
+            ) : uw.playerState === "PLAYING" ? (
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
-                <Badge variant="info" className="w-fit">In progress</Badge>
+                <Badge variant="info" className="w-fit">
+                  Puzzle {uw.puzzleNumber} / {uw.bankSize} · {uw.totalPoints} pts
+                </Badge>
                 <Button asChild className="w-full">
-                  {/* IN_PROGRESS here means the admin has started the session,
-                      not that this player has actually opened the game yet —
-                      those are two different moments for UNWORDLE (unlike
-                      Timed Wordle, where the player's own action is what
-                      starts it). Zero attempts means they've never actually
-                      submitted a guess, so "Resume" would be misleading. */}
+                  {/* A puzzle-1 session starts IN_PROGRESS the instant the
+                      admin clicks Start Round, not when this player actually
+                      opens the game — those are two different moments for
+                      UNWORDLE (unlike Timed Wordle, where the player's own
+                      action is what starts it). Zero attempts on the CURRENT
+                      puzzle means they've never actually submitted a guess
+                      on it, so "Resume" would be misleading. */}
                   <Link to={`/play/${eventId}/unwordle/game`}>
                     {uw.state?.totalAttempts === 0 ? "Start" : "Resume"}
                   </Link>
                 </Button>
               </div>
+            ) : uw.playerState === "EXITED_AWAITING_RESUME" ? (
+              <div className="mt-3 flex-1 space-y-3">
+                <div className="rounded-md border bg-muted/40 p-3 text-center">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">{uw.totalPoints} points so far</p>
+                </div>
+                <p className="text-center text-sm text-muted-foreground">
+                  You stepped away — ask an admin to resume you when you're ready.
+                </p>
+              </div>
             ) : (
-              <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
-                <Lock className="h-5 w-5 text-muted-foreground" />
-                <Badge variant="accent" className="w-fit">You're a finalist</Badge>
-                <p className="text-sm text-muted-foreground">Waiting for the admin to start your round</p>
+              // BANK_EXHAUSTED_WAITING or ROUND_ENDED
+              <div className="mt-3 flex-1 space-y-3">
+                <div className="rounded-md border bg-muted/40 p-3 text-center">
+                  <p className="text-xs font-bold uppercase text-muted-foreground">{uw.totalPoints} points</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                  <div>
+                    <p className="font-mono font-bold">{uw.totalPuzzlesCompleted} / {uw.bankSize}</p>
+                    <p className="text-muted-foreground">puzzles</p>
+                  </div>
+                  <div>
+                    <p className="font-mono font-bold">
+                      {uw.playerState === "BANK_EXHAUSTED_WAITING" ? "Waiting" : "Ended"}
+                    </p>
+                    <p className="text-muted-foreground">round status</p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" className="w-full">
+                  <Link to={`/play/${eventId}/unwordle/results`}>View full result</Link>
+                </Button>
               </div>
             )}
           </CardContent>
@@ -278,9 +290,9 @@ export function PlayerDashboard() {
       {twLeaderboard && twLeaderboard.length > 0 && (
         <LeaderboardSection
           title="Prelims Leaderboard"
-          mySessionId={tw.sessionId}
           rows={twLeaderboard.map((e) => ({
-            sessionId: e.sessionId,
+            key: e.sessionId,
+            isMe: e.sessionId === tw.sessionId,
             rank: e.rank,
             name: e.displayName,
             cells: [e.found ? "Found" : "Not found", formatMmSs(e.cumulativeTimeMs), `${e.triesUsed}/6`, String(e.tileScore)],
@@ -292,14 +304,14 @@ export function PlayerDashboard() {
       {uwLeaderboard && uwLeaderboard.length > 0 && (
         <LeaderboardSection
           title="Playoffs Leaderboard"
-          mySessionId={uw?.sessionId ?? null}
           rows={uwLeaderboard.map((e) => ({
-            sessionId: e.sessionId,
+            key: e.eventPlayerId,
+            isMe: e.eventPlayerId === uw?.eventPlayerId,
             rank: e.rank,
             name: e.displayName,
-            cells: [`${e.rowsSolvedCount}/4`, formatHhMmSsFromElapsed(e.totalTimeMs), String(e.totalAttempts)],
+            cells: [String(e.totalPoints), `${e.totalPuzzlesCompleted}`, String(e.totalAttempts)],
           }))}
-          columns={["Rows", "Time", "Attempts"]}
+          columns={["Points", "Puzzles", "Attempts"]}
         />
       )}
     </div>
@@ -308,14 +320,12 @@ export function PlayerDashboard() {
 
 function LeaderboardSection({
   title,
-  mySessionId,
   columns,
   rows,
 }: {
   title: string;
-  mySessionId: number | null;
   columns: string[];
-  rows: Array<{ sessionId: number; rank: number; name: string | null; cells: string[] }>;
+  rows: Array<{ key: number; isMe: boolean; rank: number; name: string | null; cells: string[] }>;
 }) {
   return (
     <div className="mt-6">
@@ -332,22 +342,17 @@ function LeaderboardSection({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => {
-              const isMe = r.sessionId === mySessionId;
-              return (
-                <TableRow key={r.sessionId} className={cn(isMe && "bg-accent/15")}>
-                  <TableCell>{r.rank}</TableCell>
-                  <TableCell className="font-medium">
-                    {isMe ? "You" : r.name ?? `Player ${r.sessionId}`}
+            {rows.map((r) => (
+              <TableRow key={r.key} className={cn(r.isMe && "bg-accent/15")}>
+                <TableCell>{r.rank}</TableCell>
+                <TableCell className="font-medium">{r.isMe ? "You" : r.name ?? `Player ${r.key}`}</TableCell>
+                {r.cells.map((cell, i) => (
+                  <TableCell key={i} className={i === 0 ? undefined : "font-mono"}>
+                    {cell}
                   </TableCell>
-                  {r.cells.map((cell, i) => (
-                    <TableCell key={i} className={i === 0 ? undefined : "font-mono"}>
-                      {cell}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })}
+                ))}
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>

@@ -211,7 +211,13 @@ Deno.serve(async (req) => {
       if (error) throw error;
 
       const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
-      const { data: uwPuzzle } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+      // UNWORDLE Playoffs is now a bank of many puzzles per event (played in
+      // a fixed order), not one — pull every puzzle number so this roster's
+      // "current" playoffs status can pick each player's most-advanced one.
+      const { data: uwPuzzles } = await db
+        .from("wl_unwordle_puzzles")
+        .select("id, puzzle_number")
+        .eq("event_id", eventId);
 
       const twByPlayer = new Map<number, { status: string; advanced_to_playoffs: boolean }>();
       if (twPuzzle) {
@@ -222,13 +228,20 @@ Deno.serve(async (req) => {
         for (const s of twSessions ?? []) twByPlayer.set(s.event_player_id, s);
       }
 
-      const uwByPlayer = new Map<number, { status: string }>();
-      if (uwPuzzle) {
+      const uwByPlayer = new Map<number, { status: string; puzzle_number: number }>();
+      if (uwPuzzles && uwPuzzles.length > 0) {
+        const puzzleNumberById = new Map(uwPuzzles.map((p) => [p.id, p.puzzle_number]));
         const { data: uwSessions } = await db
           .from("wl_unwordle_sessions")
-          .select("event_player_id, status")
-          .eq("puzzle_id", uwPuzzle.id);
-        for (const s of uwSessions ?? []) uwByPlayer.set(s.event_player_id, s);
+          .select("event_player_id, status, puzzle_id")
+          .in("puzzle_id", uwPuzzles.map((p) => p.id));
+        for (const s of uwSessions ?? []) {
+          const puzzleNumber = puzzleNumberById.get(s.puzzle_id) ?? 0;
+          const existing = uwByPlayer.get(s.event_player_id);
+          if (!existing || puzzleNumber > existing.puzzle_number) {
+            uwByPlayer.set(s.event_player_id, { status: s.status, puzzle_number: puzzleNumber });
+          }
+        }
       }
 
       const roster = (cohort ?? []).map((p) => {
@@ -304,6 +317,8 @@ Deno.serve(async (req) => {
       if (body.roundClosesAt) patch.round_closes_at = new Date(body.roundClosesAt).toISOString();
       if (typeof body.prelimsTopN === "number") patch.prelims_top_n = body.prelimsTopN;
       if (typeof body.playoffsWinnerCount === "number") patch.playoffs_winner_count = body.playoffsWinnerCount;
+      if (typeof body.unwordleBankSize === "number") patch.unwordle_bank_size = body.unwordleBankSize;
+      if (typeof body.unwordleRoundDurationMs === "number") patch.unwordle_round_duration_ms = body.unwordleRoundDurationMs;
 
       const { data: event, error } = await db.from("wl_events").update(patch).eq("id", eventId).select("*").maybeSingle();
       if (error) throw error;

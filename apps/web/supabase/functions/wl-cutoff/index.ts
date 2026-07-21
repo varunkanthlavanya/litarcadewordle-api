@@ -70,10 +70,12 @@ Deno.serve(async (req) => {
 
       const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
       if (!twPuzzle) return json(req, { error: "No Timed Wordle puzzle exists for this event yet" }, 400);
-      // The UNWORDLE puzzle no longer has to exist yet — wl_confirm_cutoff
-      // marks who's advancing regardless, and provisions their UNWORDLE
-      // sessions immediately if the puzzle's already there, or later (via
-      // wl_provision_unwordle_sessions) the moment it's created/published.
+      // Cutoff only marks who's advancing (advanced_to_playoffs) — it no
+      // longer creates any UNWORDLE session itself. In the continuous-round
+      // Playoffs model, sessions are only ever created by the deliberate
+      // "Start Round" admin action (wl-unwordle's round/start), so every
+      // advanced player's clock starts together, regardless of whether
+      // Cutoff happened before or after the puzzle bank was authored.
 
       const leaderboard = await getLeaderboard(db, twPuzzle.id);
       const advancing = leaderboard.filter((e) => eventPlayerIds.includes(e.eventPlayerId));

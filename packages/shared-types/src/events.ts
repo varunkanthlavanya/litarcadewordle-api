@@ -18,6 +18,10 @@ export interface EventSummary {
   roundClosesAt: string | null;
   prelimsTopN: number | null;
   playoffsWinnerCount: number | null;
+  unwordleBankSize: number;
+  unwordleRoundDurationMs: number;
+  unwordleRoundStartedAt: string | null;
+  unwordleRoundEndsAt: string | null;
   createdAt: string;
 }
 
@@ -40,6 +44,10 @@ export interface EventApiRow {
   round_closes_at: string | null;
   prelims_top_n: number | null;
   playoffs_winner_count: number | null;
+  unwordle_bank_size: number;
+  unwordle_round_duration_ms: number;
+  unwordle_round_started_at: string | null;
+  unwordle_round_ends_at: string | null;
   created_at: string;
 }
 

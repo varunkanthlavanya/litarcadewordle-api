@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { TileColor, UnwordleRoundStatusDto, UnwordleRowDto, UnwordleStateDto } from "@litarcadewordle/shared-types";
+import type {
+  TileColor,
+  UnwordleRoundOutcome,
+  UnwordleRoundStatusDto,
+  UnwordleRowDto,
+  UnwordleRowSubmitResponse,
+  UnwordleStateDto,
+} from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { Keyboard } from "@/components/shared/Keyboard";
 import { formatHhMmSsFromElapsed, useStopwatch } from "@/hooks/useStopwatch";
+import { useCountdown, formatMmSs } from "@/hooks/useCountdown";
 import { UnwordleRow } from "./UnwordleRow";
 import { UnwordleTargetRow } from "./UnwordleTargetRow";
 
@@ -17,10 +25,14 @@ const FAILED_TILE_MESSAGES: Record<string, string> = {
   GRAY_LETTER_IS_IN_SOLUTION: "That letter is actually in the solution",
 };
 
-// Only used to notice an admin-initiated end mid-game (no per-try deadline
-// exists here to schedule against, unlike Timed Wordle) — replaces the old
-// "uw:session:ended" Socket.IO push.
-const POLL_MS = 3000;
+// Deadlines are enforced server-side on every call anyway (row/submit and
+// status both reconcile the round deadline before responding) — this is
+// just how promptly the client notices a transition it didn't cause itself
+// (the round auto-ending, or an admin's early "End Round Now"), same
+// event-driven-timer + sparse-heartbeat pattern already proven for Timed
+// Wordle. A little slop past the exact deadline is fine.
+const RECONCILE_BUFFER_MS = 250;
+const HEARTBEAT_MS = 15_000;
 
 /** Unlike Timed Wordle, a tile's color here is a GIVEN clue, not something
  * revealed by a guess — so once a row is solved, its letters tell you the
@@ -47,11 +59,25 @@ function computeLetterStatus(rows: UnwordleRowDto[], solutionWord: string): Reco
   return status;
 }
 
+// Where a player who isn't currently mid-puzzle belongs — the results
+// screen doubles as the round summary for every "not playing right now"
+// reason (bank exhausted, exited awaiting resume, round ended); anything
+// before the round has even started for them belongs back on the dashboard.
+function notPlayingDestination(eventId: string | undefined, playerState: UnwordleRoundStatusDto["playerState"]): string {
+  const path = playerState === "EXITED_AWAITING_RESUME" || playerState === "BANK_EXHAUSTED_WAITING" || playerState === "ROUND_ENDED"
+    ? "unwordle/results"
+    : "dashboard";
+  return `/play/${eventId}/${path}`;
+}
+
 export function UnwordleGame() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<UnwordleStateDto | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const [puzzleNumber, setPuzzleNumber] = useState<number | null>(null);
+  const [bankSize, setBankSize] = useState<number | null>(null);
+  const [roundEndsAt, setRoundEndsAt] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState(0);
   const [currentGuess, setCurrentGuess] = useState("");
   const [rejection, setRejection] = useState<string | null>(null);
@@ -63,6 +89,37 @@ export function UnwordleGame() {
   // has had time to finish so it doesn't replay on later, unrelated re-renders.
   const [justSolvedRow, setJustSolvedRow] = useState<number | null>(null);
   const [shakeRow, setShakeRow] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleReconcile = useCallback((endsAt: number | null) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (endsAt === null) return;
+    const delay = Math.max(endsAt - Date.now(), 0) + RECONCILE_BUFFER_MS;
+    timerRef.current = setTimeout(() => void fetchStatus(), Math.min(delay, HEARTBEAT_MS));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    if (!eventId) return;
+    try {
+      const res = await apiClient.get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`);
+      if (res.playerState !== "PLAYING" || !res.state || !res.sessionId) {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        navigate(notPlayingDestination(eventId, res.playerState), { replace: true });
+        return;
+      }
+      setSessionId(res.sessionId);
+      setState(res.state);
+      setPuzzleNumber(res.puzzleNumber);
+      setBankSize(res.bankSize);
+      setRoundEndsAt(res.roundEndsAt);
+      scheduleReconcile(res.roundEndsAt);
+    } catch {
+      // Transient network hiccup on a background reconcile — the next
+      // scheduled tick (or the player's own next action) will retry.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, navigate, scheduleReconcile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,37 +128,32 @@ export function UnwordleGame() {
       .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
       .then((res) => {
         if (cancelled) return;
-        if (res.sessionStatus !== "IN_PROGRESS" || !res.state || !res.sessionId) {
-          navigate(`/play/${eventId}/dashboard`, { replace: true });
+        if (res.playerState !== "PLAYING" || !res.state || !res.sessionId) {
+          navigate(notPlayingDestination(eventId, res.playerState), { replace: true });
           return;
         }
         setSessionId(res.sessionId);
         setState(res.state);
+        setPuzzleNumber(res.puzzleNumber);
+        setBankSize(res.bankSize);
+        setRoundEndsAt(res.roundEndsAt);
         const firstUnsolved = res.state.rows.find((r) => !r.solved);
         if (firstUnsolved) setSelectedRow(firstUnsolved.rowIndex);
+        scheduleReconcile(res.roundEndsAt);
       })
       .catch((err: Error) => {
         if (!cancelled) setLoadError(err.message);
       });
 
-    const interval = setInterval(() => {
-      apiClient
-        .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
-        .then((res) => {
-          if (!cancelled && res.sessionStatus !== "IN_PROGRESS") {
-            navigate(`/play/${eventId}/unwordle/results`, { replace: true });
-          }
-        })
-        .catch(() => {});
-    }, POLL_MS);
-
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, navigate]);
 
   const elapsedMs = useStopwatch(state?.startTime ?? null);
+  const remainingMs = useCountdown(roundEndsAt);
 
   const selectedRowSolved = state?.rows.find((r) => r.rowIndex === selectedRow)?.solved ?? false;
 
@@ -127,10 +179,11 @@ export function UnwordleGame() {
     setSubmitting(true);
     setRejection(null);
     try {
-      const res = await apiClient.post<{
-        outcome: { kind: string; failedTiles?: Array<{ reason: string }>; puzzleCompleted?: boolean };
-        state: UnwordleStateDto;
-      }>(`/player/events/${eventId}/unwordle/row/submit`, { sessionId, rowIndex: rowBeingSubmitted, guess });
+      const res = await apiClient.post<UnwordleRowSubmitResponse>(`/player/events/${eventId}/unwordle/row/submit`, {
+        sessionId,
+        rowIndex: rowBeingSubmitted,
+        guess,
+      });
 
       if (res.outcome.kind === "REJECTED_INVALID_WORD") {
         setRejection("Not a valid word — try again");
@@ -148,23 +201,43 @@ export function UnwordleGame() {
 
       // ACCEPTED
       setCurrentGuess("");
-      setState(res.state);
       setJustSolvedRow(rowBeingSubmitted);
       setTimeout(() => setJustSolvedRow(null), 1200);
 
-      if (res.outcome.puzzleCompleted) {
+      const roundOutcome: UnwordleRoundOutcome = res.roundOutcome;
+      if (roundOutcome === "ROUND_ENDED") {
         navigate(`/play/${eventId}/unwordle/results`, { replace: true });
         return;
       }
+      if (roundOutcome === "BANK_EXHAUSTED") {
+        navigate(`/play/${eventId}/unwordle/results`, { replace: true });
+        return;
+      }
+      if (roundOutcome === "ADVANCED" && res.state) {
+        // Seamless auto-advance to the next puzzle — no click, no
+        // navigation, just fresh state swapped in (PRD §6 step 2).
+        setSessionId(res.sessionId);
+        setState(res.state);
+        setPuzzleNumber(res.puzzleNumber);
+        setRoundEndsAt(res.roundEndsAt);
+        const firstUnsolved = res.state.rows.find((r) => !r.solved);
+        setSelectedRow(firstUnsolved ? firstUnsolved.rowIndex : 0);
+        scheduleReconcile(res.roundEndsAt);
+        return;
+      }
 
-      const nextUnsolved = res.state.rows.find((r) => !r.solved);
-      if (nextUnsolved) setSelectedRow(nextUnsolved.rowIndex);
+      // CONTINUE
+      if (res.state) {
+        setState(res.state);
+        const nextUnsolved = res.state.rows.find((r) => !r.solved);
+        if (nextUnsolved) setSelectedRow(nextUnsolved.rowIndex);
+      }
     } catch (err) {
       setRejection(err instanceof Error ? err.message : "Could not submit");
     } finally {
       setSubmitting(false);
     }
-  }, [sessionId, currentGuess, selectedRowSolved, submitting, selectedRow, eventId, navigate]);
+  }, [sessionId, currentGuess, selectedRowSolved, submitting, selectedRow, eventId, navigate, scheduleReconcile]);
 
   // Physical/hardware keyboard support (desktop) — the on-screen Keyboard
   // below is the primary input on mobile, deliberately with no native
@@ -208,10 +281,25 @@ export function UnwordleGame() {
   return (
     <div className="mx-auto flex h-screen max-w-md flex-col gap-2 overflow-hidden p-3">
       <header className="flex items-center justify-between">
-        <h1 className="text-base font-bold">UNWORDLE</h1>
-        <div className="text-right">
-          <p className="font-mono text-xl font-bold tabular-nums">{formatHhMmSsFromElapsed(elapsedMs)}</p>
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">elapsed</p>
+        <div>
+          <h1 className="text-base font-bold">UNWORDLE</h1>
+          {puzzleNumber !== null && bankSize !== null && (
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Puzzle {puzzleNumber} / {bankSize}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="font-mono text-xl font-bold tabular-nums">{formatHhMmSsFromElapsed(elapsedMs)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">elapsed</p>
+          </div>
+          {roundEndsAt !== null && (
+            <div className="text-right">
+              <p className="font-mono text-xl font-bold tabular-nums text-primary">{formatMmSs(remainingMs)}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">round ends in</p>
+            </div>
+          )}
         </div>
       </header>
 

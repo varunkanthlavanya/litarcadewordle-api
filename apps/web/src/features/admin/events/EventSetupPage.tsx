@@ -14,6 +14,8 @@ export function EventSetupPage() {
   const [name, setName] = useState("");
   const [prelimsTopN, setPrelimsTopN] = useState(20);
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
+  const [unwordleBankSize, setUnwordleBankSize] = useState(25);
+  const [unwordleRoundDurationMinutes, setUnwordleRoundDurationMinutes] = useState(45);
   const [cohort, setCohort] = useState<ParsedCohort | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,8 @@ export function EventSetupPage() {
       await apiClient.post(`/admin/events/${event.id}/config`, {
         prelimsTopN,
         playoffsWinnerCount,
+        unwordleBankSize,
+        unwordleRoundDurationMs: unwordleRoundDurationMinutes * 60000,
       });
       if (cohort && cohort.players.length > 0) {
         await apiClient.post(`/admin/events/${event.id}/cohort`, { players: cohort.players });
@@ -87,6 +91,30 @@ export function EventSetupPage() {
                 required
               />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="bankSize">Playoffs puzzle bank size *</Label>
+                <Input
+                  id="bankSize"
+                  type="number"
+                  min={1}
+                  value={unwordleBankSize}
+                  onChange={(e) => setUnwordleBankSize(Number(e.target.value))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="roundDuration">Playoffs round length (min) *</Label>
+                <Input
+                  id="roundDuration"
+                  type="number"
+                  min={1}
+                  value={unwordleRoundDurationMinutes}
+                  onChange={(e) => setUnwordleRoundDurationMinutes(Number(e.target.value))}
+                  required
+                />
+              </div>
+            </div>
           </section>
 
           <section className="space-y-3">
@@ -121,6 +149,14 @@ export function EventSetupPage() {
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Winner count</dt>
                 <dd className="font-medium">{playoffsWinnerCount}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Playoffs puzzle bank</dt>
+                <dd className="font-medium">{unwordleBankSize} puzzles</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Playoffs round length</dt>
+                <dd className="font-medium">{unwordleRoundDurationMinutes} min</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Cohort</dt>

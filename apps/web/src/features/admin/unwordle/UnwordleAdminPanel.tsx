@@ -1,38 +1,52 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import type { TileColor, UnwordleLeaderboardEntry, UnwordleSessionMonitorEntry } from "@litarcadewordle/shared-types";
+import { useOutletContext, useParams } from "react-router-dom";
+import type {
+  UnwordleBankPuzzleDto,
+  UnwordleBulkUploadResult,
+  UnwordleLeaderboardEntry,
+  UnwordleMonitorState,
+  UnwordleSessionMonitorEntry,
+} from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
 import { useAdminLiveRefresh } from "@/hooks/useAdminLiveRefresh";
+import { useCountdown, formatMmSs } from "@/hooks/useCountdown";
 import { StatusBadge, type StatusBadgeStatus } from "@/components/shared/StatusBadge";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { UnwordleBankUploader } from "@/components/shared/UnwordleBankUploader";
+import { UnwordleTilePreviewGrid } from "@/components/shared/UnwordleTilePreviewGrid";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatHhMmSsFromElapsed } from "@/hooks/useStopwatch";
-import { UwPuzzleSetup } from "./UwPuzzleSetup";
+import type { EventWorkspaceContext } from "../events/EventWorkspaceLayout";
 
-const STATUS_BADGE: Record<string, StatusBadgeStatus> = {
-  NOT_STARTED: "notStarted",
-  IN_PROGRESS: "inProgress",
-  COMPLETED: "completed",
-  ENDED: "ended",
-  EXITED: "exited",
+const MONITOR_BADGE: Record<UnwordleMonitorState, { status: StatusBadgeStatus; label: string }> = {
+  PLAYING: { status: "inProgress", label: "Playing" },
+  BANK_EXHAUSTED: { status: "completed", label: "Bank exhausted" },
+  NOT_STARTED: { status: "notStarted", label: "Not started" },
+  EXITED_PAUSED: { status: "exited", label: "Exited — paused" },
+  ROUND_ENDED: { status: "ended", label: "Round ended" },
 };
 
 export function UnwordleAdminPanel() {
   const { eventId } = useParams<{ eventId: string }>();
   const id = Number(eventId);
+  const { event, reload } = useOutletContext<EventWorkspaceContext>();
 
-  const [puzzle, setPuzzle] = useState<{ solution_word: string; row_patterns: TileColor[][]; status: "DRAFT" | "PUBLISHED" } | null>(null);
+  const [bank, setBank] = useState<{ bankSize: number; puzzles: UnwordleBankPuzzleDto[] }>({ bankSize: event.unwordle_bank_size, puzzles: [] });
   const [sessions, setSessions] = useState<UnwordleSessionMonitorEntry[]>([]);
   const [leaderboard, setLeaderboard] = useState<UnwordleLeaderboardEntry[]>([]);
-  const [endAllOpen, setEndAllOpen] = useState(false);
-  const [startAllOpen, setStartAllOpen] = useState(false);
+  const [roundDurationMinutes, setRoundDurationMinutes] = useState(Math.round(event.unwordle_round_duration_ms / 60000));
+  const [error, setError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [endRoundOpen, setEndRoundOpen] = useState(false);
 
-  const loadPuzzle = useCallback(() => {
+  const loadBank = useCallback(() => {
     apiClient
-      .get(`/admin/events/${id}/unwordle/puzzle`)
-      .then((p) => setPuzzle(p as typeof puzzle))
-      .catch(() => setPuzzle(null));
+      .get<{ bankSize: number; puzzles: UnwordleBankPuzzleDto[] }>(`/admin/events/${id}/unwordle/bank`)
+      .then(setBank)
+      .catch(() => {});
   }, [id]);
 
   const loadSessions = useCallback(() => {
@@ -47,29 +61,64 @@ export function UnwordleAdminPanel() {
   }, [id]);
 
   useEffect(() => {
-    loadPuzzle();
+    loadBank();
     loadSessions();
-  }, [loadPuzzle, loadSessions]);
+  }, [loadBank, loadSessions]);
 
-  const { recentlyUpdated } = useAdminLiveRefresh(id, loadSessions);
+  useAdminLiveRefresh(id, loadSessions);
 
-  async function startSession(sessionId: number) {
-    await apiClient.post(`/admin/events/${id}/unwordle/session/start`, { sessionId });
+  const roundStarted = !!event.unwordle_round_started_at;
+  const roundEndsAtMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+  const remainingMs = useCountdown(roundStarted ? roundEndsAtMs : null);
+  const roundEnded = roundStarted && roundEndsAtMs !== null && Date.now() >= roundEndsAtMs;
+
+  const publishedCount = bank.puzzles.filter((p) => p.status === "PUBLISHED").length;
+  const bankedCount = bank.puzzles.length;
+  const bankComplete = bankedCount === bank.bankSize;
+  const bankFullyPublished = publishedCount === bank.bankSize && bankComplete;
+
+  function handleBankUploaded(result: UnwordleBulkUploadResult) {
+    if (result.errors.length === 0) {
+      setBank({ bankSize: result.bankSize, puzzles: [] });
+      loadBank();
+    }
+  }
+
+  async function publishBank() {
+    setError(null);
+    setPublishing(true);
+    try {
+      await apiClient.post(`/admin/events/${id}/unwordle/bank/publish`, {});
+      loadBank();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not publish bank");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function startRound() {
+    setError(null);
+    setStarting(true);
+    try {
+      await apiClient.post(`/admin/events/${id}/unwordle/round/start`, { roundDurationMs: roundDurationMinutes * 60000 });
+      reload();
+      loadSessions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start round");
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function endRoundNow() {
+    await apiClient.post(`/admin/events/${id}/unwordle/round/end`, {});
+    reload();
     loadSessions();
   }
 
-  async function endSession(sessionId: number) {
-    await apiClient.post(`/admin/events/${id}/unwordle/session/end`, { sessionId });
-    loadSessions();
-  }
-
-  async function endAll() {
-    await apiClient.post(`/admin/events/${id}/unwordle/session/endAll`, {});
-    loadSessions();
-  }
-
-  async function startAll() {
-    await apiClient.post(`/admin/events/${id}/unwordle/session/startAll`, {});
+  async function resumePlayer(eventPlayerId: number) {
+    await apiClient.post(`/admin/events/${id}/unwordle/round/resume`, { eventPlayerId });
     loadSessions();
   }
 
@@ -77,7 +126,56 @@ export function UnwordleAdminPanel() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Playoffs — UNWORDLE</h1>
 
-      <UwPuzzleSetup eventId={id} puzzle={puzzle} onChanged={loadPuzzle} hasSessions={sessions.length > 0} />
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {!roundStarted ? (
+        <div className="space-y-4 rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium">
+              Puzzle bank: <span className="font-mono">{bankedCount} / {bank.bankSize}</span> banked
+              {bankComplete && <span className="text-muted-foreground"> · {publishedCount} / {bank.bankSize} published</span>}
+            </p>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="roundDuration" className="text-xs">Round length (min)</Label>
+              <Input
+                id="roundDuration"
+                type="number"
+                min={1}
+                className="w-20"
+                value={roundDurationMinutes}
+                onChange={(e) => setRoundDurationMinutes(Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <UnwordleBankUploader eventId={id} onUploaded={handleBankUploaded} />
+
+          <UnwordleTilePreviewGrid puzzles={bank.puzzles} />
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={publishBank} disabled={!bankComplete || bankFullyPublished || publishing}>
+              {publishing ? "Publishing..." : bankFullyPublished ? "Bank published" : "Publish Bank"}
+            </Button>
+            <Button onClick={startRound} disabled={!bankFullyPublished || starting}>
+              {starting ? "Starting..." : "Start Round"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              {roundEnded ? "Round ended" : "Round ends in"}
+            </p>
+            <p className="font-mono text-2xl font-bold tabular-nums">{roundEnded ? "00:00" : formatMmSs(remainingMs)}</p>
+          </div>
+          {!roundEnded && (
+            <Button variant="destructive" onClick={() => setEndRoundOpen(true)}>
+              End Round Now
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-lg border">
         <Table>
@@ -85,39 +183,39 @@ export function UnwordleAdminPanel() {
             <TableRow>
               <TableHead>Player</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Rows</TableHead>
-              <TableHead>Elapsed</TableHead>
+              <TableHead>Puzzle</TableHead>
+              <TableHead>Rows (current)</TableHead>
+              <TableHead>Points</TableHead>
               <TableHead>Attempts</TableHead>
-              <TableHead className="w-20">Action</TableHead>
+              <TableHead className="w-24">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sessions.map((s) => (
-              <TableRow key={s.sessionId} className={recentlyUpdated.has(s.sessionId) ? "row-flash" : undefined}>
-                <TableCell>{s.displayName ?? s.mobileNumber}</TableCell>
-                <TableCell>
-                  <StatusBadge status={STATUS_BADGE[s.status] ?? "notStarted"} />
-                </TableCell>
-                <TableCell>{s.rowsSolvedCount} / 4</TableCell>
-                <TableCell className="font-mono">{s.status === "NOT_STARTED" ? "—" : formatHhMmSsFromElapsed(s.elapsedMs)}</TableCell>
-                <TableCell>{s.totalAttempts}</TableCell>
-                <TableCell>
-                  {s.status === "NOT_STARTED" && (
-                    <button className="text-xs font-medium text-success hover:underline" onClick={() => startSession(s.sessionId)}>
-                      Start
-                    </button>
-                  )}
-                  {s.status === "IN_PROGRESS" && (
-                    <button className="text-xs font-medium text-destructive hover:underline" onClick={() => endSession(s.sessionId)}>
-                      End
-                    </button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+            {sessions.map((s) => {
+              const badge = MONITOR_BADGE[s.monitorState];
+              return (
+                <TableRow key={s.eventPlayerId}>
+                  <TableCell>{s.displayName ?? s.mobileNumber}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={badge.status} label={badge.label} />
+                  </TableCell>
+                  <TableCell>{s.puzzleNumber !== null ? `${s.puzzleNumber} / ${s.bankSize}` : "—"}</TableCell>
+                  <TableCell>{s.puzzleNumber !== null ? `${s.rowsSolvedInCurrentPuzzle} / 4` : "—"}</TableCell>
+                  <TableCell className="font-mono">{s.totalPoints}</TableCell>
+                  <TableCell>{s.totalAttempts}</TableCell>
+                  <TableCell>
+                    {s.monitorState === "EXITED_PAUSED" && !roundEnded && (
+                      <button className="text-xs font-medium text-success hover:underline" onClick={() => resumePlayer(s.eventPlayerId)}>
+                        Resume
+                      </button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {sessions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   No finalists yet — advance players from the Cutoff Tool first.
                 </TableCell>
               </TableRow>
@@ -126,32 +224,13 @@ export function UnwordleAdminPanel() {
         </Table>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <Button variant="default" onClick={() => setStartAllOpen(true)} disabled={sessions.every((s) => s.status !== "NOT_STARTED")}>
-          Start All
-        </Button>
-        <Button variant="destructive" onClick={() => setEndAllOpen(true)} disabled={sessions.every((s) => s.status !== "IN_PROGRESS")}>
-          End Game for Everyone
-        </Button>
-      </div>
-
       <ConfirmDialog
-        open={startAllOpen}
-        onOpenChange={setStartAllOpen}
-        title="Start Playoffs for everyone?"
-        description="This starts every not-yet-started player's Playoffs session (and their stopwatch) all at once, instead of starting them one at a time. Continue?"
-        confirmLabel="Start All"
-        destructive={false}
-        onConfirm={startAll}
-      />
-
-      <ConfirmDialog
-        open={endAllOpen}
-        onOpenChange={setEndAllOpen}
-        title="End the game for everyone?"
-        description="This force-ends every in-progress Playoffs session and reveals all answers. Continue?"
-        confirmLabel="End Game for Everyone"
-        onConfirm={endAll}
+        open={endRoundOpen}
+        onOpenChange={setEndRoundOpen}
+        title="End the round now?"
+        description="This force-stops every player's current puzzle immediately and reveals all answers, exactly as if the round's own countdown had reached zero. Continue?"
+        confirmLabel="End Round Now"
+        onConfirm={endRoundNow}
       />
 
       <div>
@@ -162,24 +241,21 @@ export function UnwordleAdminPanel() {
               <TableRow>
                 <TableHead>#</TableHead>
                 <TableHead>Player</TableHead>
-                <TableHead>Rows</TableHead>
-                <TableHead>Time</TableHead>
+                <TableHead>Points</TableHead>
+                <TableHead>Puzzles completed</TableHead>
                 <TableHead>Attempts</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {leaderboard.slice(0, 10).map((entry) => {
-                const player = sessions.find((s) => s.eventPlayerId === entry.eventPlayerId);
-                return (
-                  <TableRow key={entry.sessionId}>
-                    <TableCell>{entry.rank}</TableCell>
-                    <TableCell>{player?.displayName ?? player?.mobileNumber ?? entry.eventPlayerId}</TableCell>
-                    <TableCell>{entry.rowsSolvedCount} / 4</TableCell>
-                    <TableCell className="font-mono">{formatHhMmSsFromElapsed(entry.totalTimeMs)}</TableCell>
-                    <TableCell>{entry.totalAttempts}</TableCell>
-                  </TableRow>
-                );
-              })}
+              {leaderboard.slice(0, 10).map((entry) => (
+                <TableRow key={entry.eventPlayerId}>
+                  <TableCell>{entry.rank}</TableCell>
+                  <TableCell>{entry.displayName ?? entry.eventPlayerId}</TableCell>
+                  <TableCell className="font-mono">{entry.totalPoints}</TableCell>
+                  <TableCell>{entry.totalPuzzlesCompleted} / {bank.bankSize}</TableCell>
+                  <TableCell>{entry.totalAttempts}</TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </div>

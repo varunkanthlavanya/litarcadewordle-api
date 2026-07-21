@@ -18,6 +18,8 @@ export function EventEditPage() {
   const [name, setName] = useState("");
   const [prelimsTopN, setPrelimsTopN] = useState(20);
   const [playoffsWinnerCount, setPlayoffsWinnerCount] = useState(3);
+  const [unwordleBankSize, setUnwordleBankSize] = useState(25);
+  const [unwordleRoundDurationMinutes, setUnwordleRoundDurationMinutes] = useState(45);
   const [existingCohortCount, setExistingCohortCount] = useState(0);
   const [newCohort, setNewCohort] = useState<ParsedCohort | null>(null);
   const [winnersCount, setWinnersCount] = useState(0);
@@ -31,6 +33,8 @@ export function EventEditPage() {
     setName(event.name);
     setPrelimsTopN(event.prelims_top_n ?? 20);
     setPlayoffsWinnerCount(event.playoffs_winner_count ?? 3);
+    setUnwordleBankSize(event.unwordle_bank_size ?? 25);
+    setUnwordleRoundDurationMinutes(Math.round((event.unwordle_round_duration_ms ?? 2700000) / 60000));
   }, [event]);
 
   useEffect(() => {
@@ -46,6 +50,8 @@ export function EventEditPage() {
       await apiClient.post(`/admin/events/${eventId}/config`, {
         prelimsTopN,
         playoffsWinnerCount,
+        unwordleBankSize,
+        unwordleRoundDurationMs: unwordleRoundDurationMinutes * 60000,
       });
       if (newCohort && newCohort.players.length > 0) {
         const res = await apiClient.post<{ count: number }>(`/admin/events/${eventId}/cohort`, { players: newCohort.players });
@@ -108,6 +114,35 @@ export function EventEditPage() {
             <Label htmlFor="winners">Winner count</Label>
             <Input id="winners" type="number" min={1} value={playoffsWinnerCount} onChange={(e) => setPlayoffsWinnerCount(Number(e.target.value))} />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="bankSize">Playoffs puzzle bank size</Label>
+              <Input
+                id="bankSize"
+                type="number"
+                min={1}
+                value={unwordleBankSize}
+                disabled={!!event.unwordle_round_started_at}
+                onChange={(e) => setUnwordleBankSize(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="roundDuration">Playoffs round length (min)</Label>
+              <Input
+                id="roundDuration"
+                type="number"
+                min={1}
+                value={unwordleRoundDurationMinutes}
+                disabled={!!event.unwordle_round_started_at}
+                onChange={(e) => setUnwordleRoundDurationMinutes(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          {event.unwordle_round_started_at && (
+            <p className="text-xs text-muted-foreground">
+              Locked — the Playoffs round has already started for this event.
+            </p>
+          )}
         </section>
 
         <section className="space-y-3">

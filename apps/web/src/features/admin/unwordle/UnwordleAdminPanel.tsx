@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
+import { Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import type {
   UnwordleBankPuzzleDto,
   UnwordleBulkUploadResult,
@@ -29,6 +31,25 @@ const MONITOR_BADGE: Record<UnwordleMonitorState, { status: StatusBadgeStatus; l
   EXITED_PAUSED: { status: "exited", label: "Exited — paused" },
   ROUND_ENDED: { status: "ended", label: "Round ended" },
 };
+
+/** Exports this event's ENTIRE banked puzzle set in exactly the same
+ * template shape UnwordleBankUploader's parser expects — so a bank built
+ * for one event becomes a real, re-uploadable file for any future one via
+ * the existing Bulk Upload path, with no new upload-side code needed. */
+function downloadBankAsXlsx(eventId: number, eventName: string, puzzles: UnwordleBankPuzzleDto[]) {
+  const rows: Array<Array<string | number>> = [
+    ["puzzle_number", "solution_word", "row_1_pattern", "row_2_pattern", "row_3_pattern", "row_4_pattern"],
+    ...[...puzzles]
+      .sort((a, b) => a.puzzleNumber - b.puzzleNumber)
+      .map((p) => [p.puzzleNumber, p.solutionWord, ...p.rowPatterns.map((row) => row.join(","))]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Puzzle Bank");
+  const safeName = eventName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  XLSX.writeFile(wb, `unwordle-bank-event-${eventId}${safeName ? `-${safeName}` : ""}.xlsx`);
+}
 
 export function UnwordleAdminPanel() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -126,7 +147,19 @@ export function UnwordleAdminPanel() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Playoffs — UNWORDLE</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Playoffs — UNWORDLE</h1>
+        {bank.puzzles.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadBankAsXlsx(id, event.name, bank.puzzles)}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download Bank (.xlsx) — reuse in future events
+          </Button>
+        )}
+      </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

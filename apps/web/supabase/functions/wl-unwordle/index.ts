@@ -18,7 +18,6 @@ import { adminEndSession, playerExitSession, submitWord, type UnwordleSession } 
 import { checkRowSatisfiability, validatePuzzlePatterns } from "../_shared/unwordle/puzzleValidator.ts";
 import type { TileColor } from "../_shared/unwordle/validation.ts";
 import {
-  computeFreebieRows,
   createAndStartSessionCascading,
   hydrateSession,
   loadSessionAndPuzzle,
@@ -73,6 +72,172 @@ function toStateDto(state: UnwordleSession) {
   };
 }
 
+function buildNotAFinalist(eventName: string, eventPlayerId: number) {
+  return {
+    eventName,
+    isFinalist: false,
+    eventPlayerId,
+    playerState: "NOT_A_FINALIST" as const,
+    sessionId: null,
+    sessionStatus: null,
+    state: null,
+    ended: null,
+    puzzleNumber: null,
+    bankSize: null,
+    totalPoints: 0,
+    totalPuzzlesCompleted: 0,
+    roundStartedAt: null,
+    roundEndsAt: null,
+    bankExhausted: false,
+    roundEnded: false,
+  };
+}
+
+type EventRow = {
+  id: number;
+  name: string;
+  unwordle_round_started_at: string | null;
+  unwordle_round_ends_at: string | null;
+  unwordle_round_duration_ms: number;
+  unwordle_bank_size: number;
+};
+
+/** Computes a finalist's full round status — shared by "status" (read-only
+ * polling) and "enter" (which stamps the deadline/session first, then
+ * calls straight into this). Assumes the caller already confirmed
+ * isFinalist === true. */
+async function buildFinalistStatus(db: ReturnType<typeof supabaseAdmin>, event: EventRow, eventPlayerId: number, now: number) {
+  const notAFinalist = buildNotAFinalist(event.name, eventPlayerId);
+
+  if (!event.unwordle_round_started_at) {
+    return { ...notAFinalist, isFinalist: true as const, playerState: "AWAITING_ROUND_START" as const, bankSize: event.unwordle_bank_size };
+  }
+
+  const roundStartedAtMs = new Date(event.unwordle_round_started_at).getTime();
+  const adminDeadlineMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+
+  const { data: playerRow } = await db.from("wl_event_players").select("unwordle_deadline_at").eq("id", eventPlayerId).maybeSingle();
+  const personalDeadlineMs = playerRow?.unwordle_deadline_at ? new Date(playerRow.unwordle_deadline_at).getTime() : null;
+
+  if (personalDeadlineMs === null) {
+    // Round is open, but this player hasn't personally entered yet — an
+    // admin-forced early end still applies to them even though they never
+    // played (0 points, visible, never silently omitted).
+    if (adminDeadlineMs !== null && now >= adminDeadlineMs) {
+      return {
+        ...notAFinalist,
+        isFinalist: true as const,
+        playerState: "ROUND_ENDED" as const,
+        bankSize: event.unwordle_bank_size,
+        roundStartedAt: roundStartedAtMs,
+        roundEndsAt: adminDeadlineMs,
+        roundEnded: true,
+      };
+    }
+    return {
+      ...notAFinalist,
+      isFinalist: true as const,
+      playerState: "READY_TO_ENTER" as const,
+      bankSize: event.unwordle_bank_size,
+      roundStartedAt: roundStartedAtMs,
+    };
+  }
+
+  await reconcileRoundForPlayer(db, event, eventPlayerId, now);
+
+  const effectiveDeadlineMs = adminDeadlineMs !== null ? Math.min(personalDeadlineMs, adminDeadlineMs) : personalDeadlineMs;
+  const roundEnded = now >= effectiveDeadlineMs;
+
+  const { data: puzzles } = await db.from("wl_unwordle_puzzles").select("id, puzzle_number").eq("event_id", event.id);
+  const puzzleIds = (puzzles ?? []).map((p) => p.id);
+  const puzzleNumberById = new Map((puzzles ?? []).map((p) => [p.id, p.puzzle_number]));
+
+  const { data: mySessions } = await db.from("wl_unwordle_sessions").select("*").in("puzzle_id", puzzleIds).eq("event_player_id", eventPlayerId);
+  const sessions = ((mySessions ?? []) as SessionRow[])
+    .map((s) => ({ ...s, puzzleNumber: puzzleNumberById.get(s.puzzle_id) ?? 0 }))
+    .sort((a, b) => a.puzzleNumber - b.puzzleNumber);
+
+  const totalPoints = sessions.reduce((sum, s) => sum + s.rows_solved_count * 25, 0);
+  const totalPuzzlesCompleted = sessions.filter((s) => s.status === "COMPLETED").length;
+
+  if (sessions.length === 0) {
+    // Only reachable in the instant right after entering a bank whose
+    // every puzzle turned out fully-freebie — entered, but nothing was
+    // ever actually IN_PROGRESS for them to resume into.
+    return {
+      ...notAFinalist,
+      isFinalist: true as const,
+      playerState: roundEnded ? ("ROUND_ENDED" as const) : ("BANK_EXHAUSTED_WAITING" as const),
+      bankSize: event.unwordle_bank_size,
+      roundStartedAt: roundStartedAtMs,
+      roundEndsAt: effectiveDeadlineMs,
+      bankExhausted: !roundEnded,
+      roundEnded,
+    };
+  }
+
+  const current = sessions[sessions.length - 1];
+  const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("*").eq("id", current.puzzle_id).maybeSingle<BankPuzzleRow>();
+  const { data: rowRows } = await db.from("wl_unwordle_rows").select("*").eq("session_id", current.id).order("row_index");
+  const state = hydrateSession(current, (rowRows ?? []) as RowRow[], puzzle!.solution_word, puzzle!.row_patterns);
+
+  let playerState: "PLAYING" | "EXITED_AWAITING_RESUME" | "BANK_EXHAUSTED_WAITING" | "ROUND_ENDED";
+  let ended = null;
+  let stateDto = null;
+
+  if (roundEnded) {
+    playerState = "ROUND_ENDED";
+    if (current.status !== "IN_PROGRESS") {
+      ended = buildEndedPayload(current.id, current.status === "COMPLETED" ? "completed" : "admin_ended", state);
+    }
+  } else if (current.status === "IN_PROGRESS") {
+    playerState = "PLAYING";
+    stateDto = toStateDto(state);
+  } else if (current.status === "EXITED") {
+    playerState = "EXITED_AWAITING_RESUME";
+  } else if (current.status === "COMPLETED" && current.puzzleNumber >= event.unwordle_bank_size) {
+    playerState = "BANK_EXHAUSTED_WAITING";
+  } else {
+    playerState = "PLAYING";
+    stateDto = toStateDto(state);
+  }
+
+  return {
+    eventName: event.name,
+    isFinalist: true as const,
+    eventPlayerId,
+    playerState,
+    sessionId: current.id,
+    sessionStatus: current.status,
+    state: stateDto,
+    ended,
+    puzzleNumber: current.puzzleNumber,
+    bankSize: event.unwordle_bank_size,
+    totalPoints,
+    totalPuzzlesCompleted,
+    roundStartedAt: roundStartedAtMs,
+    roundEndsAt: effectiveDeadlineMs,
+    bankExhausted: playerState === "BANK_EXHAUSTED_WAITING",
+    roundEnded,
+  };
+}
+
+/** The deadline that actually governs one player right now: their own
+ * personal clock (started at "enter"), or an admin's "End Round Now"
+ * override, whichever comes first. Null only if neither has happened yet. */
+async function getEffectiveDeadlineMs(
+  db: ReturnType<typeof supabaseAdmin>,
+  event: { unwordle_round_ends_at: string | null },
+  eventPlayerId: number
+): Promise<number | null> {
+  const { data: playerRow } = await db.from("wl_event_players").select("unwordle_deadline_at").eq("id", eventPlayerId).maybeSingle();
+  const personal = playerRow?.unwordle_deadline_at ? new Date(playerRow.unwordle_deadline_at).getTime() : null;
+  const admin = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+  if (personal === null) return admin;
+  if (admin === null) return personal;
+  return Math.min(personal, admin);
+}
+
 // ===================== Round-scoped aggregation =====================
 // The unit of "who's on the leaderboard / in the monitor" is now every
 // advanced-to-playoffs player (from Timed Wordle's advanced_to_playoffs
@@ -88,6 +253,10 @@ interface PlayerRoundAggregate {
   eventPlayerId: number;
   displayName: string | null;
   mobileNumber: string;
+  /** Null until this player has actually entered the game — their
+   * personal 45-minute clock only starts ticking from that moment, not
+   * from whenever the admin clicked Start Round. */
+  deadlineAt: number | null;
   sessions: Array<{
     id: number;
     puzzleNumber: number;
@@ -113,7 +282,7 @@ async function loadAdvancedPlayersWithSessions(db: ReturnType<typeof supabaseAdm
 
   const { data: players } = await db
     .from("wl_event_players")
-    .select("id, display_name, mobile_number")
+    .select("id, display_name, mobile_number, unwordle_deadline_at")
     .in("id", advancedPlayerIds);
 
   const { data: bankPuzzles } = await db.from("wl_unwordle_puzzles").select("id, puzzle_number").eq("event_id", eventId);
@@ -144,6 +313,7 @@ async function loadAdvancedPlayersWithSessions(db: ReturnType<typeof supabaseAdm
     eventPlayerId: p.id,
     displayName: p.display_name,
     mobileNumber: p.mobile_number,
+    deadlineAt: p.unwordle_deadline_at ? new Date(p.unwordle_deadline_at).getTime() : null,
     sessions: (sessionsByPlayer.get(p.id) ?? []).sort((a, b) => a.puzzleNumber - b.puzzleNumber),
   }));
 }
@@ -175,6 +345,7 @@ function toMonitorEntry(agg: PlayerRoundAggregate, bankSize: number) {
     totalPuzzlesCompleted,
     totalAttempts,
     monitorState,
+    deadlineAt: agg.deadlineAt,
   };
 }
 
@@ -454,6 +625,13 @@ Deno.serve(async (req) => {
 
       // ---- Round lifecycle ----
 
+      // Opens the round for entry — deliberately does NOT create any
+      // sessions or start anyone's clock. Each advanced player's own
+      // 45-minute deadline is stamped lazily, the moment THEY call
+      // "enter" (see the player-side route below), not when the admin
+      // clicks this button. This is what lets an admin publish the bank
+      // and announce "go" without penalizing whoever hasn't physically
+      // opened the game on their device yet.
       if (action === "round/start" && req.method === "POST") {
         const body = await req.json().catch(() => ({}));
         const { data: event } = await db.from("wl_events").select("*").eq("id", eventId).maybeSingle();
@@ -470,122 +648,21 @@ Deno.serve(async (req) => {
           return json(req, { error: `Bank only has ${publishedCount ?? 0}/${bankSize} puzzles published — publish the full bank before starting the round` }, 400);
         }
 
-        const { data: bankPuzzles } = await db.from("wl_unwordle_puzzles").select("*").eq("event_id", eventId).order("puzzle_number");
-        if (!bankPuzzles || bankPuzzles.length === 0) return json(req, { error: "Puzzle 1 not found in the bank" }, 400);
-        const puzzleIds = bankPuzzles.map((p) => p.id);
-
         const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
         if (!twPuzzle) return json(req, { error: "No Timed Wordle puzzle exists for this event yet" }, 400);
-        const { data: advancedRows } = await db
+        const { count: advancedCount } = await db
           .from("wl_timed_wordle_sessions")
-          .select("event_player_id")
+          .select("id", { count: "exact", head: true })
           .eq("puzzle_id", twPuzzle.id)
           .eq("advanced_to_playoffs", true);
-        const advancedIds = (advancedRows ?? []).map((r) => r.event_player_id);
-        if (advancedIds.length === 0) return json(req, { error: "No players have been advanced to Playoffs yet" }, 400);
-
-        // Idempotent retry safety — skip anyone who already has ANY session
-        // in this event's bank (a retried/duplicate Start Round call must
-        // not double-up).
-        const { data: existingSessions } = await db.from("wl_unwordle_sessions").select("event_player_id").in("puzzle_id", puzzleIds);
-        const alreadyStarted = new Set((existingSessions ?? []).map((r) => r.event_player_id));
-        const toStart = advancedIds.filter((id) => !alreadyStarted.has(id));
+        if ((advancedCount ?? 0) === 0) return json(req, { error: "No players have been advanced to Playoffs yet" }, 400);
 
         const now = Date.now();
-        const nowIso = new Date(now).toISOString();
-
-        if (toStart.length > 0) {
-          // Every puzzle whose 4 rows are all freebie (all-Green) has
-          // nothing for a player to actually do — it's born already
-          // COMPLETED for everyone, and the round only really begins at the
-          // first puzzle with real rows to solve. This is the bulk-path
-          // equivalent of createAndStartSessionCascading, sized for
-          // hundreds of players at once rather than looping per player.
-          const skippedPuzzles: (typeof bankPuzzles)[number][] = [];
-          let startPuzzle: (typeof bankPuzzles)[number] | null = null;
-          for (const p of bankPuzzles) {
-            const { freebieCount } = computeFreebieRows(p.row_patterns);
-            if (freebieCount === p.row_patterns.length) {
-              skippedPuzzles.push(p);
-            } else {
-              startPuzzle = p;
-              break;
-            }
-          }
-
-          for (const p of skippedPuzzles) {
-            const { freebieRows, freebieCount } = computeFreebieRows(p.row_patterns);
-            const { data: insertedSessions, error: sessionError } = await db
-              .from("wl_unwordle_sessions")
-              .insert(
-                toStart.map((eventPlayerId) => ({
-                  puzzle_id: p.id,
-                  event_player_id: eventPlayerId,
-                  status: "COMPLETED",
-                  start_time: nowIso,
-                  stop_time: nowIso,
-                  rows_solved_count: freebieCount,
-                }))
-              )
-              .select("id");
-            if (sessionError) return json(req, { error: sessionError.message }, 400);
-
-            const rowsToInsert = (insertedSessions ?? []).flatMap((s) =>
-              Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
-                session_id: s.id,
-                row_index: rowIndex,
-                solved: freebieRows[rowIndex],
-                solved_word: freebieRows[rowIndex] ? p.solution_word : null,
-              }))
-            );
-            if (rowsToInsert.length > 0) {
-              const { error: rowsError } = await db.from("wl_unwordle_rows").insert(rowsToInsert);
-              if (rowsError) return json(req, { error: rowsError.message }, 400);
-            }
-          }
-
-          if (startPuzzle) {
-            const { freebieRows, freebieCount } = computeFreebieRows(startPuzzle.row_patterns);
-            const { data: insertedSessions, error: sessionError } = await db
-              .from("wl_unwordle_sessions")
-              .insert(
-                toStart.map((eventPlayerId) => ({
-                  puzzle_id: startPuzzle!.id,
-                  event_player_id: eventPlayerId,
-                  status: "IN_PROGRESS",
-                  start_time: nowIso,
-                  rows_solved_count: freebieCount,
-                }))
-              )
-              .select("id");
-            if (sessionError) return json(req, { error: sessionError.message }, 400);
-
-            const rowsToInsert = (insertedSessions ?? []).flatMap((s) =>
-              Array.from({ length: ROWS_PER_PUZZLE }, (_, rowIndex) => ({
-                session_id: s.id,
-                row_index: rowIndex,
-                solved: freebieRows[rowIndex],
-                solved_word: freebieRows[rowIndex] ? startPuzzle!.solution_word : null,
-              }))
-            );
-            if (rowsToInsert.length > 0) {
-              const { error: rowsError } = await db.from("wl_unwordle_rows").insert(rowsToInsert);
-              if (rowsError) return json(req, { error: rowsError.message }, 400);
-            }
-          }
-          // If every puzzle in the bank is fully-freebie (startPuzzle stays
-          // null), toStart players simply end up with only COMPLETED
-          // sessions and no active one — they'll correctly show as
-          // BANK_EXHAUSTED the moment anything reads their status.
-        }
-
         const roundDurationMs = typeof body.roundDurationMs === "number" && body.roundDurationMs > 0 ? body.roundDurationMs : event.unwordle_round_duration_ms;
-        const roundEndsAtIso = new Date(now + roundDurationMs).toISOString();
         await db
           .from("wl_events")
           .update({
             unwordle_round_started_at: new Date(now).toISOString(),
-            unwordle_round_ends_at: roundEndsAtIso,
             unwordle_round_duration_ms: roundDurationMs,
             status: "PLAYOFFS_LIVE",
           })
@@ -597,10 +674,10 @@ Deno.serve(async (req) => {
           actionType: "UNWORDLE_ROUND_STARTED",
           targetType: "event",
           targetIds: [eventId],
-          metadata: { count: toStart.length, roundDurationMs },
+          metadata: { advancedCount, roundDurationMs },
         });
 
-        return json(req, { ok: true, startedCount: toStart.length, roundEndsAt: roundEndsAtIso });
+        return json(req, { ok: true });
       }
 
       if (action === "round/end" && req.method === "POST") {
@@ -646,8 +723,12 @@ Deno.serve(async (req) => {
         if (!event) return json(req, { error: "Event not found" }, 404);
 
         const now = Date.now();
-        if (event.unwordle_round_ends_at && now >= new Date(event.unwordle_round_ends_at).getTime()) {
-          return json(req, { error: "The round has already ended" }, 400);
+        const { data: targetPlayerRow } = await db.from("wl_event_players").select("unwordle_deadline_at").eq("id", targetPlayerId).maybeSingle();
+        const adminDeadlineMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+        const personalDeadlineMs = targetPlayerRow?.unwordle_deadline_at ? new Date(targetPlayerRow.unwordle_deadline_at).getTime() : null;
+        const deadlineCandidates = [adminDeadlineMs, personalDeadlineMs].filter((d): d is number => d !== null);
+        if (deadlineCandidates.length > 0 && now >= Math.min(...deadlineCandidates)) {
+          return json(req, { error: "The round has already ended for this player" }, 400);
         }
 
         const { data: puzzles } = await db.from("wl_unwordle_puzzles").select("id, puzzle_number").eq("event_id", eventId);
@@ -706,24 +787,7 @@ Deno.serve(async (req) => {
         const { data: event } = await db.from("wl_events").select("*").eq("id", eventId).maybeSingle();
         if (!event) return json(req, { error: "Event not found" }, 404);
 
-        const notAFinalist = {
-          eventName: event.name,
-          isFinalist: false,
-          eventPlayerId: player.eventPlayerId,
-          playerState: "NOT_A_FINALIST" as const,
-          sessionId: null,
-          sessionStatus: null,
-          state: null,
-          ended: null,
-          puzzleNumber: null,
-          bankSize: null,
-          totalPoints: 0,
-          totalPuzzlesCompleted: 0,
-          roundStartedAt: null,
-          roundEndsAt: null,
-          bankExhausted: false,
-          roundEnded: false,
-        };
+        const notAFinalist = buildNotAFinalist(event.name, player.eventPlayerId);
 
         const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
         if (!twPuzzle) return json(req, notAFinalist);
@@ -735,92 +799,52 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (!myTwSession?.advanced_to_playoffs) return json(req, notAFinalist);
 
-        if (!event.unwordle_round_started_at) {
-          return json(req, {
-            ...notAFinalist,
-            isFinalist: true,
-            playerState: "AWAITING_ROUND_START" as const,
-            bankSize: event.unwordle_bank_size,
-          });
-        }
+        return json(req, await buildFinalistStatus(db, event, player.eventPlayerId, Date.now()));
+      }
+
+      // Explicit "I am now actually opening the game" action — the ONLY
+      // place a player's personal 45-minute clock gets stamped and their
+      // first session created. Deliberately NOT folded into "status" GET,
+      // since the dashboard polls status every few seconds just to render
+      // the card — if status itself started the clock, merely having the
+      // dashboard open in a background tab would silently burn a player's
+      // time before they ever clicked anything.
+      if (action === "enter" && req.method === "POST") {
+        const { data: event } = await db.from("wl_events").select("*").eq("id", eventId).maybeSingle();
+        if (!event) return json(req, { error: "Event not found" }, 404);
+
+        const { data: twPuzzle } = await db.from("wl_timed_wordle_puzzles").select("id").eq("event_id", eventId).maybeSingle();
+        const { data: myTwSession } = twPuzzle
+          ? await db
+              .from("wl_timed_wordle_sessions")
+              .select("advanced_to_playoffs")
+              .eq("puzzle_id", twPuzzle.id)
+              .eq("event_player_id", player.eventPlayerId)
+              .maybeSingle()
+          : { data: null };
+        if (!myTwSession?.advanced_to_playoffs) return json(req, { error: "Only Prelims finalists can enter Playoffs" }, 403);
+        if (!event.unwordle_round_started_at) return json(req, { error: "The admin hasn't opened Playoffs yet" }, 400);
 
         const now = Date.now();
-        await reconcileRoundForPlayer(db, event, player.eventPlayerId, now);
+        const { data: playerRow } = await db
+          .from("wl_event_players")
+          .select("unwordle_deadline_at")
+          .eq("id", player.eventPlayerId)
+          .maybeSingle();
 
-        const roundStartedAtMs = event.unwordle_round_started_at ? new Date(event.unwordle_round_started_at).getTime() : null;
-        const roundEndsAtMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
-        const roundEnded = roundEndsAtMs !== null && now >= roundEndsAtMs;
-
-        const { data: puzzles } = await db.from("wl_unwordle_puzzles").select("id, puzzle_number").eq("event_id", eventId);
-        const puzzleIds = (puzzles ?? []).map((p) => p.id);
-        const puzzleNumberById = new Map((puzzles ?? []).map((p) => [p.id, p.puzzle_number]));
-
-        const { data: mySessions } = await db.from("wl_unwordle_sessions").select("*").in("puzzle_id", puzzleIds).eq("event_player_id", player.eventPlayerId);
-        const sessions = ((mySessions ?? []) as SessionRow[])
-          .map((s) => ({ ...s, puzzleNumber: puzzleNumberById.get(s.puzzle_id) ?? 0 }))
-          .sort((a, b) => a.puzzleNumber - b.puzzleNumber);
-
-        const totalPoints = sessions.reduce((sum, s) => sum + s.rows_solved_count * 25, 0);
-        const totalPuzzlesCompleted = sessions.filter((s) => s.status === "COMPLETED").length;
-
-        if (sessions.length === 0) {
-          // Advanced + round started, but never got a session — reachable
-          // only for a latecomer advanced after Start Round already fired
-          // (an accepted, low-probability edge case, not a bug).
-          return json(req, {
-            ...notAFinalist,
-            isFinalist: true,
-            playerState: "AWAITING_ROUND_START" as const,
-            bankSize: event.unwordle_bank_size,
-            roundStartedAt: roundStartedAtMs,
-            roundEndsAt: roundEndsAtMs,
-          });
-        }
-
-        const current = sessions[sessions.length - 1];
-        const { data: puzzle } = await db.from("wl_unwordle_puzzles").select("*").eq("id", current.puzzle_id).maybeSingle<BankPuzzleRow>();
-        const { data: rowRows } = await db.from("wl_unwordle_rows").select("*").eq("session_id", current.id).order("row_index");
-        const state = hydrateSession(current, (rowRows ?? []) as RowRow[], puzzle!.solution_word, puzzle!.row_patterns);
-
-        let playerState: "PLAYING" | "EXITED_AWAITING_RESUME" | "BANK_EXHAUSTED_WAITING" | "ROUND_ENDED";
-        let ended = null;
-        let stateDto = null;
-
-        if (roundEnded) {
-          playerState = "ROUND_ENDED";
-          if (current.status !== "IN_PROGRESS") {
-            ended = buildEndedPayload(current.id, current.status === "COMPLETED" ? "completed" : "admin_ended", state);
+        if (!playerRow?.unwordle_deadline_at) {
+          const adminDeadlineMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+          if (adminDeadlineMs !== null && now >= adminDeadlineMs) {
+            return json(req, { error: "The round has already ended" }, 400);
           }
-        } else if (current.status === "IN_PROGRESS") {
-          playerState = "PLAYING";
-          stateDto = toStateDto(state);
-        } else if (current.status === "EXITED") {
-          playerState = "EXITED_AWAITING_RESUME";
-        } else if (current.status === "COMPLETED" && current.puzzleNumber >= event.unwordle_bank_size) {
-          playerState = "BANK_EXHAUSTED_WAITING";
-        } else {
-          playerState = "PLAYING";
-          stateDto = toStateDto(state);
+          await db
+            .from("wl_event_players")
+            .update({ unwordle_deadline_at: new Date(now + event.unwordle_round_duration_ms).toISOString() })
+            .eq("id", player.eventPlayerId);
+          await createAndStartSessionCascading(db, eventId, 1, event.unwordle_bank_size, player.eventPlayerId, now);
         }
 
-        return json(req, {
-          eventName: event.name,
-          isFinalist: true,
-          eventPlayerId: player.eventPlayerId,
-          playerState,
-          sessionId: current.id,
-          sessionStatus: current.status,
-          state: stateDto,
-          ended,
-          puzzleNumber: current.puzzleNumber,
-          bankSize: event.unwordle_bank_size,
-          totalPoints,
-          totalPuzzlesCompleted,
-          roundStartedAt: roundStartedAtMs,
-          roundEndsAt: roundEndsAtMs,
-          bankExhausted: playerState === "BANK_EXHAUSTED_WAITING",
-          roundEnded,
-        });
+        return json(req, await buildFinalistStatus(db, event, player.eventPlayerId, now));
       }
 
       if (action === "leaderboard" && req.method === "GET") {
@@ -838,7 +862,7 @@ Deno.serve(async (req) => {
         if (!event) return json(req, { error: "Event not found" }, 404);
 
         const now = Date.now();
-        const roundEndsAtMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+        const roundEndsAtMs = await getEffectiveDeadlineMs(db, event, player.eventPlayerId);
         const { forcedEnd } = await reconcileRoundForPlayer(db, event, player.eventPlayerId, now);
         if (forcedEnd) {
           const loaded = await loadSessionAndPuzzle(db, sessionId);

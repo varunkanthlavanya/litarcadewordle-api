@@ -124,8 +124,13 @@ export function UnwordleGame() {
   useEffect(() => {
     let cancelled = false;
 
+    // "enter" (not "status") for the very first load — this is the one
+    // action that actually stamps this player's personal deadline and
+    // creates their first session, exactly at the moment they open the
+    // game. Every later reconcile tick uses read-only "status" instead
+    // (see fetchStatus above), since by then they've already entered.
     apiClient
-      .get<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/status`)
+      .post<UnwordleRoundStatusDto>(`/player/events/${eventId}/unwordle/enter`, {})
       .then((res) => {
         if (cancelled) return;
         if (res.playerState !== "PLAYING" || !res.state || !res.sessionId) {

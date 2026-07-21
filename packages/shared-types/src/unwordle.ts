@@ -117,6 +117,9 @@ export interface UnwordleSessionMonitorEntry {
   totalPuzzlesCompleted: number;
   totalAttempts: number;
   monitorState: UnwordleMonitorState;
+  /** Epoch ms this player's own clock runs out — null until they've
+   * actually entered the game (see UnwordlePlayerState's READY_TO_ENTER). */
+  deadlineAt: number | null;
 }
 
 /** Row-wise-points round leaderboard — replaces the old single-session,
@@ -142,6 +145,10 @@ export interface UnwordleLeaderboardEntry {
 export type UnwordlePlayerState =
   | "NOT_A_FINALIST"
   | "AWAITING_ROUND_START"
+  /** The admin has opened the round, but this player hasn't personally
+   * clicked in yet — their clock has not started. Distinct from
+   * AWAITING_ROUND_START (admin hasn't opened it at all yet). */
+  | "READY_TO_ENTER"
   | "PLAYING"
   | "EXITED_AWAITING_RESUME"
   | "BANK_EXHAUSTED_WAITING"

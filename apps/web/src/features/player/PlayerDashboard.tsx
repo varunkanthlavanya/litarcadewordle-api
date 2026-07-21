@@ -233,19 +233,26 @@ export function PlayerDashboard() {
                 <Badge variant="accent" className="w-fit">You're a finalist</Badge>
                 <p className="text-sm text-muted-foreground">Waiting for the admin to start your round</p>
               </div>
+            ) : uw.playerState === "READY_TO_ENTER" ? (
+              <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
+                <Badge variant="accent" className="w-fit">You're a finalist</Badge>
+                <p className="text-sm text-muted-foreground">
+                  The round is open — your personal clock starts the moment you jump in.
+                </p>
+                <Button asChild className="w-full">
+                  <Link to={`/play/${eventId}/unwordle/game`}>Play now</Link>
+                </Button>
+              </div>
             ) : uw.playerState === "PLAYING" ? (
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
                 <Badge variant="info" className="w-fit">
                   Puzzle {uw.puzzleNumber} / {uw.bankSize} · {uw.totalPoints} pts
                 </Badge>
                 <Button asChild className="w-full">
-                  {/* A puzzle-1 session starts IN_PROGRESS the instant the
-                      admin clicks Start Round, not when this player actually
-                      opens the game — those are two different moments for
-                      UNWORDLE (unlike Timed Wordle, where the player's own
-                      action is what starts it). Zero attempts on the CURRENT
-                      puzzle means they've never actually submitted a guess
-                      on it, so "Resume" would be misleading. */}
+                  {/* This player has already entered (their own clock is
+                      running) — zero attempts on the CURRENT puzzle means
+                      they've never actually submitted a guess on it, so
+                      "Resume" would be misleading there specifically. */}
                   <Link to={`/play/${eventId}/unwordle/game`}>
                     {uw.state?.totalAttempts === 0 ? "Start" : "Resume"}
                   </Link>

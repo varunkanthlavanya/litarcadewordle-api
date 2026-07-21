@@ -91,9 +91,12 @@ export function UnwordleAdminPanel() {
   useAdminLiveRefresh(id, loadSessions);
 
   const roundStarted = !!event.unwordle_round_started_at;
-  const roundEndsAtMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
-  const remainingMs = useCountdown(roundStarted ? roundEndsAtMs : null);
-  const roundEnded = roundStarted && roundEndsAtMs !== null && Date.now() >= roundEndsAtMs;
+  // An admin "End Round Now" force-ends everyone regardless of their own
+  // clock — this is the only event-wide deadline left. Each player's own
+  // 45-minute countdown (started the moment THEY entered) is rendered per
+  // row in the monitor table below instead of one shared countdown here.
+  const forcedEndAtMs = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+  const roundForceEnded = roundStarted && forcedEndAtMs !== null && Date.now() >= forcedEndAtMs;
 
   const publishedCount = bank.puzzles.filter((p) => p.status === "PUBLISHED").length;
   const bankedCount = bank.puzzles.length;
@@ -211,11 +214,15 @@ export function UnwordleAdminPanel() {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              {roundEnded ? "Round ended" : "Round ends in"}
+              {roundForceEnded ? "Round force-ended" : "Round is live"}
             </p>
-            <p className="font-mono text-2xl font-bold tabular-nums">{roundEnded ? "00:00" : formatMmSs(remainingMs)}</p>
+            <p className="text-sm text-muted-foreground">
+              {roundForceEnded
+                ? "End Round Now was used — every player has been stopped."
+                : "Each player's own clock starts the moment they enter the game — see Time left per row below."}
+            </p>
           </div>
-          {!roundEnded && (
+          {!roundForceEnded && (
             <Button variant="destructive" onClick={() => setEndRoundOpen(true)}>
               End Round Now
             </Button>
@@ -233,12 +240,14 @@ export function UnwordleAdminPanel() {
               <TableHead>Rows (current)</TableHead>
               <TableHead>Points</TableHead>
               <TableHead>Attempts</TableHead>
+              <TableHead>Time left</TableHead>
               <TableHead className="w-24">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sessions.map((s) => {
               const badge = MONITOR_BADGE[s.monitorState];
+              const personalTimeUp = s.deadlineAt !== null && Date.now() >= s.deadlineAt;
               return (
                 <TableRow key={s.eventPlayerId}>
                   <TableCell>{s.displayName ?? s.mobileNumber}</TableCell>
@@ -250,7 +259,10 @@ export function UnwordleAdminPanel() {
                   <TableCell className="font-mono">{s.totalPoints}</TableCell>
                   <TableCell>{s.totalAttempts}</TableCell>
                   <TableCell>
-                    {s.monitorState === "EXITED_PAUSED" && !roundEnded && (
+                    <PlayerTimeLeftCell deadlineAt={s.deadlineAt} />
+                  </TableCell>
+                  <TableCell>
+                    {s.monitorState === "EXITED_PAUSED" && !roundForceEnded && !personalTimeUp && (
                       <button className="text-xs font-medium text-success hover:underline" onClick={() => resumePlayer(s.eventPlayerId)}>
                         Resume
                       </button>
@@ -261,7 +273,7 @@ export function UnwordleAdminPanel() {
             })}
             {sessions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                   No finalists yet — advance players from the Cutoff Tool first.
                 </TableCell>
               </TableRow>
@@ -274,7 +286,7 @@ export function UnwordleAdminPanel() {
         open={endRoundOpen}
         onOpenChange={setEndRoundOpen}
         title="End the round now?"
-        description="This force-stops every player's current puzzle immediately and reveals all answers, exactly as if the round's own countdown had reached zero. Continue?"
+        description="This immediately force-stops every player's current puzzle and reveals all answers, overriding everyone's own personal clock even if it hasn't run out yet. Continue?"
         confirmLabel="End Round Now"
         onConfirm={endRoundNow}
       />
@@ -308,4 +320,14 @@ export function UnwordleAdminPanel() {
       </div>
     </div>
   );
+}
+
+/** One player's own personal countdown — each row ticks independently since
+ * every player's clock started at a different real moment (whenever THEY
+ * entered), not a single shared deadline. */
+function PlayerTimeLeftCell({ deadlineAt }: { deadlineAt: number | null }) {
+  const remainingMs = useCountdown(deadlineAt);
+  if (deadlineAt === null) return <span className="text-muted-foreground">Not entered</span>;
+  if (remainingMs <= 0) return <span className="text-muted-foreground">Ended</span>;
+  return <span className="font-mono">{formatMmSs(remainingMs)}</span>;
 }

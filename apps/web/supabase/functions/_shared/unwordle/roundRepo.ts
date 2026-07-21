@@ -202,25 +202,34 @@ export async function createAndStartSessionCascading(
   return { bankExhausted: true };
 }
 
-/** Lazily reconciles one player's round against the event's authoritative
- * `unwordle_round_ends_at` deadline — the same "check now() against a
- * stored deadline on every touch" pattern _shared/timedWordle/repo.ts's
- * loadAndReconcile already established for Timed Wordle, just scoped to a
- * whole round instead of per-try budgets. Force-ends whatever puzzle this
- * player is mid-solving, exactly like an admin End Round Now would. */
+/** Each player now runs their own personal clock, stamped onto
+ * wl_event_players.unwordle_deadline_at the moment THEY enter the game
+ * (see the "enter" route in wl-unwordle/index.ts) — not a single
+ * event-wide deadline stamped at Start Round for everyone at once. An
+ * admin's "End Round Now" (event.unwordle_round_ends_at) still force-ends
+ * every player immediately regardless of where their own clock stands, so
+ * the effective deadline for reconciling any one player is whichever of
+ * the two comes first. A player with no personal deadline yet (hasn't
+ * entered) has nothing to reconcile unless the admin has force-ended the
+ * whole round out from under them. */
 export async function reconcileRoundForPlayer(
   db: ReturnType<typeof supabaseAdmin>,
-  event: { id: number; status: string; unwordle_round_ends_at: string | null },
+  event: { id: number; unwordle_round_ends_at: string | null },
   eventPlayerId: number,
   now: number
 ): Promise<{ forcedEnd: boolean }> {
-  if (!event.unwordle_round_ends_at) return { forcedEnd: false };
-  const deadline = new Date(event.unwordle_round_ends_at).getTime();
-  if (now < deadline) return { forcedEnd: false };
+  const { data: playerRow } = await db
+    .from("wl_event_players")
+    .select("unwordle_deadline_at")
+    .eq("id", eventPlayerId)
+    .maybeSingle();
 
-  if (event.status !== "PLAYOFFS_CLOSED") {
-    await db.from("wl_events").update({ status: "PLAYOFFS_CLOSED" }).eq("id", event.id);
-  }
+  const personalDeadline = playerRow?.unwordle_deadline_at ? new Date(playerRow.unwordle_deadline_at).getTime() : null;
+  const adminForcedDeadline = event.unwordle_round_ends_at ? new Date(event.unwordle_round_ends_at).getTime() : null;
+  const candidateDeadlines = [personalDeadline, adminForcedDeadline].filter((d): d is number => d !== null);
+  if (candidateDeadlines.length === 0) return { forcedEnd: false };
+  const deadline = Math.min(...candidateDeadlines);
+  if (now < deadline) return { forcedEnd: false };
 
   const { data: puzzles } = await db.from("wl_unwordle_puzzles").select("id").eq("event_id", event.id);
   const puzzleIds = (puzzles ?? []).map((p) => p.id);

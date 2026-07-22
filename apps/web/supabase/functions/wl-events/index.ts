@@ -317,8 +317,24 @@ Deno.serve(async (req) => {
       if (body.roundClosesAt) patch.round_closes_at = new Date(body.roundClosesAt).toISOString();
       if (typeof body.prelimsTopN === "number") patch.prelims_top_n = body.prelimsTopN;
       if (typeof body.playoffsWinnerCount === "number") patch.playoffs_winner_count = body.playoffsWinnerCount;
-      if (typeof body.unwordleBankSize === "number") patch.unwordle_bank_size = body.unwordleBankSize;
-      if (typeof body.unwordleRoundDurationMs === "number") patch.unwordle_round_duration_ms = body.unwordleRoundDurationMs;
+      // A bank size or round duration of 0 (easy to produce by clearing a
+      // number input mid-edit — Number("") is 0, not NaN) would silently
+      // brick the whole Playoffs round: a 0ms duration stamps every
+      // player's personal deadline as already-expired the instant they
+      // enter (see wl-unwordle's "enter" route), showing the round as
+      // ended for everyone before anyone gets to play.
+      if (body.unwordleBankSize !== undefined) {
+        if (typeof body.unwordleBankSize !== "number" || body.unwordleBankSize <= 0) {
+          return json(req, { error: "Puzzle bank size must be a positive number" }, 400);
+        }
+        patch.unwordle_bank_size = body.unwordleBankSize;
+      }
+      if (body.unwordleRoundDurationMs !== undefined) {
+        if (typeof body.unwordleRoundDurationMs !== "number" || body.unwordleRoundDurationMs <= 0) {
+          return json(req, { error: "Playoffs round length must be a positive number of minutes" }, 400);
+        }
+        patch.unwordle_round_duration_ms = body.unwordleRoundDurationMs;
+      }
 
       const { data: event, error } = await db.from("wl_events").update(patch).eq("id", eventId).select("*").maybeSingle();
       if (error) throw error;

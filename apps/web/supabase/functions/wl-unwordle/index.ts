@@ -659,6 +659,12 @@ Deno.serve(async (req) => {
 
         const now = Date.now();
         const roundDurationMs = typeof body.roundDurationMs === "number" && body.roundDurationMs > 0 ? body.roundDurationMs : event.unwordle_round_duration_ms;
+        // A non-positive duration would stamp every player's personal
+        // deadline as already-expired the instant they enter — showing
+        // the round as ended for everyone before anyone gets to play.
+        if (!(roundDurationMs > 0)) {
+          return json(req, { error: "This event's round length is invalid (0 or unset) — fix it under Cohort & Settings before starting the round" }, 400);
+        }
         await db
           .from("wl_events")
           .update({

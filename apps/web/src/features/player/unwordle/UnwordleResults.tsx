@@ -54,7 +54,7 @@ export function UnwordleResults() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-5 py-6 text-center">
         <p className="text-sm text-muted-foreground">
-          {status.playerState === "NOT_A_FINALIST" ? "You didn't advance to Playoffs this time." : "The Playoffs round hasn't started yet."}
+          {status.playerState === "NOT_A_FINALIST" ? "You didn't advance to the Finals this time." : "The Finals round hasn't started yet."}
         </p>
         <Button asChild variant="outline">
           <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>

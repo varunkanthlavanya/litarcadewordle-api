@@ -215,18 +215,18 @@ export function PlayerDashboard() {
           </CardContent>
         </Card>
 
-        {/* ---------------- UNWORDLE (Playoffs) ---------------- */}
+        {/* ---------------- UNWORDLE (Finals) ---------------- */}
         <Card>
           <CardContent className="flex h-full flex-col p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-bold">UNWORDLE</h2>
-              <Badge variant="secondary">Playoffs</Badge>
+              <Badge variant="secondary">Finals</Badge>
             </div>
 
             {!uw || uw.playerState === "NOT_A_FINALIST" ? (
               <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
                 <Lock className="h-5 w-5 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Only Prelims finalists advance to Playoffs</p>
+                <p className="text-sm text-muted-foreground">Only Prelims finalists advance to the Finals</p>
               </div>
             ) : uw.playerState === "AWAITING_ROUND_START" ? (
               <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
@@ -311,7 +311,7 @@ export function PlayerDashboard() {
 
       {uwLeaderboard && uwLeaderboard.length > 0 && (
         <LeaderboardSection
-          title="Playoffs Leaderboard"
+          title="Finals Leaderboard"
           rows={uwLeaderboard.map((e) => ({
             key: e.eventPlayerId,
             isMe: e.eventPlayerId === uw?.eventPlayerId,

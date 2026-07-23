@@ -36,7 +36,7 @@ export function AdminLogin() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Admin Console</CardTitle>
-          <CardDescription>LitArcadeWordle tournament control</CardDescription>
+          <CardDescription>WORDLE League tournament control</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

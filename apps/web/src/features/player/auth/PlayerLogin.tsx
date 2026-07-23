@@ -15,7 +15,7 @@ export function PlayerLogin() {
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-extrabold text-primary-foreground">
           L
         </div>
-        <h1 className="text-xl font-bold">LitArcadeWordle</h1>
+        <h1 className="text-xl font-bold">WORDLE League</h1>
         <p className="mt-1 text-center text-sm text-muted-foreground">Enter your event ID and mobile number to join</p>
 
         <PlayerLoginForm initialEventId={eventId} />

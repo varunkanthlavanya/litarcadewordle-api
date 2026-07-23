@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const TEMPLATES = [
-  { key: "advanced", title: "You've advanced to the Playoffs!", type: "ADVANCED" as const },
+  { key: "advanced", title: "You've advanced to the Finals!", type: "ADVANCED" as const },
   { key: "custom", title: "Custom message", type: "ADMIN_MESSAGE" as const },
 ];
 

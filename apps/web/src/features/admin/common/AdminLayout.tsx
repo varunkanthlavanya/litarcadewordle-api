@@ -37,7 +37,7 @@ export function AdminLayout() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-extrabold text-primary-foreground">
               L
             </span>
-            <span className="font-bold">LitArcadeWordle Admin</span>
+            <span className="font-bold">WORDLE League Admin</span>
           </Link>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <span>{nameLabel}</span>

@@ -30,7 +30,7 @@ export function Home() {
           </div>
           <h1 className="text-2xl font-extrabold tracking-[0.08em]">LEAGUE</h1>
           <p className="mt-2 text-center text-sm text-muted-foreground">
-            A two-stage Wordle tournament — Prelims speed round, then Playoffs reverse-Wordle showdown.
+            A two-stage Wordle tournament — Prelims speed round, then Finals reverse-Wordle showdown.
           </p>
 
           <PlayerLoginForm />

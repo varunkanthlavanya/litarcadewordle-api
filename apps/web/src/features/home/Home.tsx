@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PlayerLoginForm } from "@/features/player/auth/PlayerLoginForm";
+import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
 
 // The wordmark: each letter of WORDLE styled like a game tile, echoing the
 // actual gameplay tiles rather than a generic logo mark.
@@ -44,6 +45,8 @@ export function Home() {
           <p className="mt-4 text-center text-xs text-muted-foreground">Having trouble? Ask your event coordinator.</p>
         </div>
       </div>
+
+      <EntertainmentPartners />
     </div>
   );
 }

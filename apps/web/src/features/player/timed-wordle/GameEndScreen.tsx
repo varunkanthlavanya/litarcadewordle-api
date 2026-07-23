@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/apiClient";
 import { formatMmSs } from "@/hooks/useCountdown";
+import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
 import { cn } from "@/lib/utils";
 import type { TimedWordleGameEndedPayload, TimedWordleLeaderboardEntry } from "@litarcadewordle/shared-types";
 
@@ -87,6 +88,8 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
       <Button asChild variant="outline" className="mt-6">
         <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>
       </Button>
+
+      <EntertainmentPartners />
     </div>
   );
 }

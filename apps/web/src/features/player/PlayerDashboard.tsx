@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatHhMmSs, formatMmSs, useCountdown } from "@/hooks/useCountdown";
+import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 10_000;
@@ -321,6 +322,8 @@ export function PlayerDashboard() {
           columns={["Points", "Puzzles", "Attempts"]}
         />
       )}
+
+      <EntertainmentPartners />
     </div>
   );
 }

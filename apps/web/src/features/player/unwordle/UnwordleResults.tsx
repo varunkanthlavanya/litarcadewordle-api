@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCountdown, formatMmSs } from "@/hooks/useCountdown";
+import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
 import { cn } from "@/lib/utils";
 
 /** Round summary — replaces the old "one puzzle's 4-row breakdown" screen.
@@ -58,6 +59,7 @@ export function UnwordleResults() {
         <Button asChild variant="outline">
           <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>
         </Button>
+        <EntertainmentPartners />
       </div>
     );
   }
@@ -149,6 +151,8 @@ export function UnwordleResults() {
       <Button asChild variant="outline" className="mx-auto mt-6">
         <Link to={`/play/${eventId}/dashboard`}>Back to dashboard</Link>
       </Button>
+
+      <EntertainmentPartners />
     </div>
   );
 }

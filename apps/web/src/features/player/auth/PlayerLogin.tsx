@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
 import { BackLink } from "@/components/shared/BackLink";
+import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
 import { PlayerLoginForm } from "./PlayerLoginForm";
 
 export function PlayerLogin() {
@@ -23,6 +24,8 @@ export function PlayerLogin() {
           Having trouble? Ask your event coordinator.
         </p>
       </div>
+
+      <EntertainmentPartners />
     </div>
   );
 }

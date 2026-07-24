@@ -52,7 +52,7 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
     <div className="flex min-h-screen flex-col bg-background px-5 py-6">
       <div
         className={cn(
-          "rounded-xl border p-5 text-center",
+          "rounded-none border p-5 text-center",
           found ? "border-success/30 bg-success-subtle" : "border-destructive/30 bg-destructive-subtle"
         )}
       >
@@ -69,14 +69,14 @@ export function GameEndScreen({ result }: { result: TimedWordleGameEndedPayload 
         <Stat label="tile score" value={String(result.summary.tileScore)} />
       </div>
 
-      <div className="mt-5 rounded-xl border bg-card p-4 text-center">
+      <div className="mt-5 rounded-none border bg-card p-4 text-center">
         <p className="text-xs text-muted-foreground">Your rank</p>
         {!roundClosed ? (
-          <Badge variant="secondary" className="mt-1">
+          <Badge variant="secondary" className="mt-1 rounded-none">
             Hidden until the Prelims round closes for everyone
           </Badge>
         ) : rank === null ? (
-          <Badge variant="secondary" className="mt-1">Calculating...</Badge>
+          <Badge variant="secondary" className="mt-1 rounded-none">Calculating...</Badge>
         ) : (
           <p className="mt-1 text-3xl font-extrabold">
             #{rank}

@@ -18,7 +18,7 @@ export function UnwordleTargetRow({ solutionWord }: { solutionWord: string | nul
           <WordleTile key={i} size="md" state="correct" letter={letter} />
         ))}
       </div>
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-success-foreground">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-none bg-success text-success-foreground">
         <Check className="h-3.5 w-3.5" />
       </span>
     </div>

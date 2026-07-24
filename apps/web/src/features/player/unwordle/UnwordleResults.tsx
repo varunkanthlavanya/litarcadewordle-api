@@ -78,7 +78,7 @@ export function UnwordleResults() {
       </div>
 
       {status.playerState === "BANK_EXHAUSTED_WAITING" && (
-        <div className="mt-6 flex flex-col items-center gap-2 rounded-xl border bg-success-subtle p-5 text-center">
+        <div className="mt-6 flex flex-col items-center gap-2 rounded-none border bg-success-subtle p-5 text-center">
           <p className="font-semibold text-success">
             You've completed every puzzle in the bank — nice work!
           </p>
@@ -93,7 +93,7 @@ export function UnwordleResults() {
       )}
 
       {status.playerState === "EXITED_AWAITING_RESUME" && (
-        <div className="mt-6 rounded-xl border bg-muted/40 p-5 text-center">
+        <div className="mt-6 rounded-none border bg-muted/40 p-5 text-center">
           <p className="font-semibold">You stepped away from the round.</p>
           <p className="text-sm text-muted-foreground">Ask an admin to resume you when you're ready to continue.</p>
         </div>
@@ -134,7 +134,7 @@ export function UnwordleResults() {
         </>
       )}
 
-      <div className="mt-6 rounded-xl border bg-card p-4 text-center">
+      <div className="mt-6 rounded-none border bg-card p-4 text-center">
         <p className="text-xs text-muted-foreground">Leaderboard rank</p>
         {!status.roundEnded ? (
           <p className="mt-1 text-sm text-muted-foreground">Hidden until the round ends for everyone</p>

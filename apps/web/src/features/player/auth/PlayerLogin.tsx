@@ -7,12 +7,12 @@ export function PlayerLogin() {
   const { eventId } = useParams<{ eventId: string }>();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-10">
+    <div className="wl-player-shell font-serif flex min-h-screen flex-col items-center justify-center bg-background px-5 py-10">
       <div className="flex w-full max-w-sm flex-col items-center">
         <div className="mb-3 self-start">
           <BackLink to="/" label="Back to home" />
         </div>
-        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-extrabold text-primary-foreground">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-none bg-primary text-lg font-extrabold text-primary-foreground">
           L
         </div>
         <h1 className="text-xl font-bold">WORDLE League</h1>

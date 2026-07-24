@@ -169,11 +169,11 @@ export function PlayerDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* ---------------- Timed Wordle (Prelims) ---------------- */}
-        <Card>
+        <Card className="border-t-4 border-t-success">
           <CardContent className="flex h-full flex-col p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-bold">Timed Wordle</h2>
-              <Badge variant="secondary">Prelims</Badge>
+              <Badge variant="secondary" className="rounded-none">Prelims</Badge>
             </div>
             <Button
               variant="ghost"
@@ -217,7 +217,7 @@ export function PlayerDashboard() {
               </div>
             ) : tw.sessionStatus === "IN_PROGRESS" ? (
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
-                <Badge variant="info" className="w-fit">In progress</Badge>
+                <Badge variant="info" className="w-fit rounded-none">In progress</Badge>
                 <Button asChild className="w-full">
                   <Link to={`/play/${eventId}/game`}>Resume</Link>
                 </Button>
@@ -251,11 +251,11 @@ export function PlayerDashboard() {
         </Card>
 
         {/* ---------------- UNWORDLE (Finals) ---------------- */}
-        <Card>
+        <Card className="border-t-4 border-t-uw-accent">
           <CardContent className="flex h-full flex-col p-5">
             <div className="flex items-center justify-between">
               <h2 className="font-bold">UNWORDLE</h2>
-              <Badge variant="secondary">Finals</Badge>
+              <Badge variant="secondary" className="rounded-none">Finals</Badge>
             </div>
             <Button
               variant="ghost"
@@ -275,12 +275,12 @@ export function PlayerDashboard() {
             ) : uw.playerState === "AWAITING_ROUND_START" ? (
               <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
                 <Lock className="h-5 w-5 text-muted-foreground" />
-                <Badge variant="accent" className="w-fit">You're a finalist</Badge>
+                <Badge variant="uwAccent" className="w-fit rounded-none">You're a finalist</Badge>
                 <p className="text-sm text-muted-foreground">Waiting for the admin to start your round</p>
               </div>
             ) : uw.playerState === "READY_TO_ENTER" ? (
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
-                <Badge variant="accent" className="w-fit">You're a finalist</Badge>
+                <Badge variant="uwAccent" className="w-fit rounded-none">You're a finalist</Badge>
                 <p className="text-sm text-muted-foreground">
                   The round is open — your personal clock starts the moment you jump in.
                 </p>
@@ -290,7 +290,7 @@ export function PlayerDashboard() {
               </div>
             ) : uw.playerState === "PLAYING" ? (
               <div className="mt-3 flex flex-1 flex-col justify-end gap-3">
-                <Badge variant="info" className="w-fit">
+                <Badge variant="uwAccent" className="w-fit rounded-none">
                   Puzzle {uw.puzzleNumber} / {uw.bankSize} · {uw.totalPoints} pts
                 </Badge>
                 <Button asChild className="w-full">

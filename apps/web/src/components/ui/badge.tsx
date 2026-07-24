@@ -16,6 +16,7 @@ const badgeVariants = cva(
         info: "border-transparent bg-info-subtle text-info",
         offline: "border-transparent bg-offline-subtle text-offline",
         accent: "border-transparent bg-accent text-accent-foreground",
+        uwAccent: "border-transparent bg-uw-accent-subtle text-uw-accent",
       },
     },
     defaultVariants: {

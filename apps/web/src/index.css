@@ -45,6 +45,10 @@
     --offline-foreground: 0.22 0.02 65;
     --offline-subtle: 0.9 0.006 70;
 
+    --uw-accent: 0.48 0.15 290;
+    --uw-accent-foreground: 0.99 0.005 80;
+    --uw-accent-subtle: 0.91 0.045 290;
+
     --border: 0.87 0.016 70;
     --input: 0.87 0.016 70;
     --ring: 0.53 0.15 43;
@@ -104,6 +108,10 @@
     --offline-foreground: 0.94 0.01 75;
     --offline-subtle: 0.26 0.01 70;
 
+    --uw-accent: 0.62 0.15 290;
+    --uw-accent-foreground: 0.14 0.02 65;
+    --uw-accent-subtle: 0.28 0.06 290;
+
     --border: 0.3 0.018 68;
     --input: 0.3 0.018 68;
     --ring: 0.62 0.15 43;
@@ -143,5 +151,15 @@
 
   .row-flash {
     animation: row-flash 800ms ease-out;
+  }
+
+  /* Player-facing screens only (see PlayerLayout/Home/PlayerLogin) — square
+     corners everywhere, since Card/Button/Dialog/Input's own "rounded-lg" /
+     "rounded-md" utilities are already defined relative to --radius (see
+     tailwind.config.ts's borderRadius.lg/md/sm), so overriding the variable
+     here squares them off without touching the shared components
+     themselves (which admin still uses rounded). */
+  .wl-player-shell {
+    --radius: 0px;
   }
 }

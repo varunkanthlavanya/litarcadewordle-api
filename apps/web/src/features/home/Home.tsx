@@ -15,14 +15,14 @@ const WORDMARK_TILES = [
 
 export function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[oklch(0.94_0.012_75)] px-5 py-12">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-background px-8 py-10 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
+    <div className="wl-player-shell font-serif flex min-h-screen flex-col items-center justify-center bg-[oklch(0.94_0.012_75)] px-5 py-12">
+      <div className="w-full max-w-sm rounded-none border border-border bg-background px-8 py-10 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
         <div className="flex w-full flex-col items-center">
           <div className="mb-2.5 flex gap-[5px]">
             {WORDMARK_TILES.map(({ letter, color }) => (
               <div
                 key={letter}
-                className={`flex h-[30px] w-[30px] items-center justify-center rounded-[5px] font-mono text-[15px] font-bold text-white ${color}`}
+                className={`flex h-[30px] w-[30px] items-center justify-center rounded-none font-mono text-[15px] font-bold text-white ${color}`}
               >
                 {letter}
               </div>

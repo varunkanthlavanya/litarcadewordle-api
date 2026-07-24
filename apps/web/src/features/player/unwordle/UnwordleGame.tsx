@@ -9,9 +9,11 @@ import type {
   UnwordleStateDto,
 } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
+import { isValidGuessWord } from "@/lib/dictionary";
 import { Keyboard } from "@/components/shared/Keyboard";
 import { formatHhMmSsFromElapsed, useStopwatch } from "@/hooks/useStopwatch";
 import { useCountdown, formatMmSs } from "@/hooks/useCountdown";
+import { cn } from "@/lib/utils";
 import { UnwordleRow } from "./UnwordleRow";
 import { UnwordleTargetRow } from "./UnwordleTargetRow";
 
@@ -33,6 +35,18 @@ const FAILED_TILE_MESSAGES: Record<string, string> = {
 // Wordle. A little slop past the exact deadline is fine.
 const RECONCILE_BUFFER_MS = 250;
 const HEARTBEAT_MS = 15_000;
+
+// How long the just-solved row's flourish (letter-by-letter reveal, then
+// checkmark bounce — see UnwordleRow.tsx) gets to play before we act on
+// ADVANCED/BANK_EXHAUSTED/ROUND_ENDED. Must be >= the row's own reveal time
+// — REVEAL_STAGGER_MS/FLIP_DURATION_MS in UnwordleRow.tsx give a 5-tile row
+// (5-1)*500 + 1100/2 = 2550ms to fully reveal — otherwise clearing
+// `justSolved` early would jump-cut mid-flip tiles straight to their final
+// state instead of letting the animation play out.
+const FLOURISH_MS = 2600;
+// Board fade duration either side of an auto-advance swap — long enough to
+// read as a deliberate transition, short enough not to feel sluggish.
+const FADE_MS = 200;
 
 /** Unlike Timed Wordle, a tile's color here is a GIVEN clue, not something
  * revealed by a guess — so once a row is solved, its letters tell you the
@@ -89,7 +103,12 @@ export function UnwordleGame() {
   // has had time to finish so it doesn't replay on later, unrelated re-renders.
   const [justSolvedRow, setJustSolvedRow] = useState<number | null>(null);
   const [shakeRow, setShakeRow] = useState<number | null>(null);
+  // Drives the fade transition around an auto-advance puzzle swap — false
+  // for the brief FADE_MS window between the old puzzle fading out and the
+  // new one fading in.
+  const [boardVisible, setBoardVisible] = useState(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleReconcile = useCallback((endsAt: number | null) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -153,6 +172,7 @@ export function UnwordleGame() {
     return () => {
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, navigate]);
@@ -181,6 +201,19 @@ export function UnwordleGame() {
     if (!sessionId || currentGuess.length !== WORD_LENGTH || selectedRowSolved || submitting) return;
     const rowBeingSubmitted = selectedRow;
     const guess = currentGuess;
+
+    // Instant, zero-network rejection for a not-a-real-word guess — mirrors
+    // Timed Wordle's TimedWordleGame.tsx. The server re-checks this too (the
+    // authoritative copy), but a typo shouldn't cost a round trip. This can't
+    // cover REJECTED_TILE_MISMATCH, since that depends on the hidden solution
+    // word the client never has — only the network can arbitrate that one.
+    if (!isValidGuessWord(guess)) {
+      setRejection("Not a valid word — try again");
+      setShakeRow(rowBeingSubmitted);
+      setTimeout(() => setShakeRow(null), 400);
+      return;
+    }
+
     setSubmitting(true);
     setRejection(null);
     try {
@@ -206,28 +239,54 @@ export function UnwordleGame() {
 
       // ACCEPTED
       setCurrentGuess("");
+      // Mark the row solved locally right away, using the guess we just
+      // submitted — the server doesn't echo back the OLD puzzle's post-solve
+      // state when advancing (only the new puzzle's), so without this the
+      // flourish below would have nothing but a blank row to animate.
+      setState((prev) =>
+        prev
+          ? {
+              ...prev,
+              rows: prev.rows.map((r) =>
+                r.rowIndex === rowBeingSubmitted ? { ...r, solved: true, solvedWord: guess } : r
+              ),
+            }
+          : prev
+      );
       setJustSolvedRow(rowBeingSubmitted);
-      setTimeout(() => setJustSolvedRow(null), 1200);
+      setTimeout(() => setJustSolvedRow(null), FLOURISH_MS);
 
       const roundOutcome: UnwordleRoundOutcome = res.roundOutcome;
-      if (roundOutcome === "ROUND_ENDED") {
-        navigate(`/play/${eventId}/unwordle/results`, { replace: true });
-        return;
-      }
-      if (roundOutcome === "BANK_EXHAUSTED") {
-        navigate(`/play/${eventId}/unwordle/results`, { replace: true });
+      if (roundOutcome === "ROUND_ENDED" || roundOutcome === "BANK_EXHAUSTED") {
+        // Let the solve flourish finish playing before leaving the screen,
+        // instead of yanking the player away mid-animation.
+        advanceTimerRef.current = setTimeout(() => {
+          navigate(`/play/${eventId}/unwordle/results`, { replace: true });
+        }, FLOURISH_MS);
         return;
       }
       if (roundOutcome === "ADVANCED" && res.state) {
-        // Seamless auto-advance to the next puzzle — no click, no
-        // navigation, just fresh state swapped in (PRD §6 step 2).
-        setSessionId(res.sessionId);
-        setState(res.state);
-        setPuzzleNumber(res.puzzleNumber);
-        setRoundEndsAt(res.roundEndsAt);
-        const firstUnsolved = res.state.rows.find((r) => !r.solved);
-        setSelectedRow(firstUnsolved ? firstUnsolved.rowIndex : 0);
-        scheduleReconcile(res.roundEndsAt);
+        const nextState = res.state;
+        const nextSessionId = res.sessionId;
+        const nextPuzzleNumber = res.puzzleNumber;
+        const nextRoundEndsAt = res.roundEndsAt;
+        // Seamless auto-advance (PRD §6 step 2): let the solve flourish
+        // finish, fade the board out, swap the fresh puzzle in, then fade
+        // back in — rather than an instant same-tick replacement that cuts
+        // the flourish off and pops the new puzzle in abruptly.
+        advanceTimerRef.current = setTimeout(() => {
+          setBoardVisible(false);
+          advanceTimerRef.current = setTimeout(() => {
+            setSessionId(nextSessionId);
+            setState(nextState);
+            setPuzzleNumber(nextPuzzleNumber);
+            setRoundEndsAt(nextRoundEndsAt);
+            const firstUnsolved = nextState.rows.find((r) => !r.solved);
+            setSelectedRow(firstUnsolved ? firstUnsolved.rowIndex : 0);
+            scheduleReconcile(nextRoundEndsAt);
+            setBoardVisible(true);
+          }, FADE_MS);
+        }, FLOURISH_MS);
         return;
       }
 
@@ -308,7 +367,12 @@ export function UnwordleGame() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-2">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col justify-center gap-2 transition-opacity ease-in-out",
+          boardVisible ? "opacity-100 duration-200" : "opacity-0 duration-150"
+        )}
+      >
         <div className="flex flex-col gap-2">
           {state.rows.map((row) => (
             <UnwordleRow

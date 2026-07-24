@@ -3,7 +3,11 @@ import { WordleTile } from "@/components/shared/WordleTile";
 import { cn } from "@/lib/utils";
 import type { UnwordleRowDto } from "@litarcadewordle/shared-types";
 
-const REVEAL_STAGGER_MS = 300;
+// Matches Timed Wordle's WordGrid.tsx exactly (FLIP_STAGGER_MS/FLIP_DURATION_MS)
+// so both games' tile-flip reveals feel identical: total visible reveal time
+// for a 5-tile row is (5-1)*STAGGER + DURATION/2 = 4*500 + 550 = 2550ms.
+const REVEAL_STAGGER_MS = 500;
+const FLIP_DURATION_MS = 1100;
 
 interface UnwordleRowProps {
   row: UnwordleRowDto;
@@ -52,6 +56,7 @@ export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved,
               patternColor={color}
               letter={letter}
               revealDelayMs={justSolved ? i * REVEAL_STAGGER_MS : undefined}
+              flipDurationMs={FLIP_DURATION_MS}
               pop={!row.solved && typedLetter !== ""}
               active={i === activeIndex}
             />
@@ -61,7 +66,7 @@ export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved,
       {row.solved && (
         <span
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-success text-success-foreground",
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-none bg-success text-success-foreground",
             justSolved && "animate-tile-bounce"
           )}
           style={justSolved ? { animationDelay: `${row.pattern.length * REVEAL_STAGGER_MS}ms` } : undefined}

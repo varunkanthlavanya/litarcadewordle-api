@@ -118,7 +118,7 @@ export function WordleTile({
     return (
       <div
         className={cn(
-          "tile-skipped flex items-center justify-center rounded-[8px] font-mono text-[10px] font-bold uppercase",
+          "tile-skipped flex items-center justify-center rounded-none font-mono text-[10px] font-bold uppercase",
           SIZE_CLASSES[size],
           className
         )}
@@ -132,7 +132,7 @@ export function WordleTile({
     return (
       <div
         className={cn(
-          "flex items-center justify-center rounded-[8px] border-2 border-tile-empty-border text-xl font-bold uppercase",
+          "flex items-center justify-center rounded-none border-2 border-tile-empty-border text-xl font-bold uppercase",
           SIZE_CLASSES[size],
           pop && "animate-tile-pop",
           className
@@ -158,7 +158,7 @@ export function WordleTile({
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-[8px] border-2 font-bold uppercase",
+        "flex items-center justify-center rounded-none border-2 font-bold uppercase",
         showColor ? COLOR_STATE_CLASSES[colorState] : "border-tile-empty-border",
         SIZE_CLASSES[size],
         flipping && "animate-tile-flip",

@@ -25,10 +25,10 @@ export function NotificationToast({ type, title, meta, createdAt, onDismiss }: N
   const isAdvancement = type === "ADVANCED";
 
   return (
-    <div className="flex w-full max-w-sm items-start gap-3 rounded-xl border bg-card p-3 shadow-[0_12px_28px_rgba(0,0,0,0.10)]">
+    <div className="flex w-full max-w-sm items-start gap-3 rounded-none border bg-card p-3 shadow-[0_12px_28px_rgba(0,0,0,0.10)]">
       <span
         className={cn(
-          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-none",
           isAdvancement ? "bg-success-subtle text-success" : "bg-info-subtle text-info"
         )}
       >

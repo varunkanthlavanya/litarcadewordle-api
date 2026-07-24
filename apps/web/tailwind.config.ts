@@ -14,6 +14,7 @@ export default {
       fontFamily: {
         sans: ["Manrope", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        serif: ["Lora", "Georgia", "serif"],
       },
       colors: {
         border: "oklch(var(--border))",
@@ -70,6 +71,11 @@ export default {
           foreground: "oklch(var(--offline-foreground))",
         },
         "offline-subtle": "oklch(var(--offline-subtle))",
+        "uw-accent": {
+          DEFAULT: "oklch(var(--uw-accent))",
+          foreground: "oklch(var(--uw-accent-foreground))",
+        },
+        "uw-accent-subtle": "oklch(var(--uw-accent-subtle))",
         tile: {
           green: "oklch(var(--tile-green))",
           yellow: "oklch(var(--tile-yellow))",

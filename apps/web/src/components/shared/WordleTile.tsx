@@ -16,11 +16,16 @@ const TILE_COLOR_TO_STATE: Record<TileColor, "correct" | "present" | "absent"> =
   GRAY: "absent",
 };
 
-// Must match tailwind.config.ts's "tile-flip" animation duration — half of it
-// is the moment the tile is edge-on (rotateX 90deg) and invisible, which is
-// when a real Wordle-style reveal swaps the hidden face for the true one.
-const FLIP_DURATION_MS = 650;
-const FLIP_HALF_MS = FLIP_DURATION_MS / 2;
+// Default matches tailwind.config.ts's "tile-flip" animation duration — half
+// of it is the moment the tile is edge-on (rotateX 90deg) and invisible,
+// which is when a real Wordle-style reveal swaps the hidden face for the
+// true one. Callers that want a slower/faster reveal (see WordGrid.tsx)
+// override it per-instance via `flipDurationMs`, applied as an inline
+// `animation-duration` — CSS lets a longhand property set inline win over
+// the shorthand `animation` the "tile-flip" utility class sets, so this
+// doesn't require touching the shared Tailwind keyframe or affecting any
+// other caller (e.g. UNWORDLE's UnwordleRow, which never passes this prop).
+const DEFAULT_FLIP_DURATION_MS = 650;
 
 interface WordleTileProps {
   state: WordleTileState;
@@ -38,6 +43,9 @@ interface WordleTileProps {
    * this instead reveals the solved LETTER at the midpoint, since the color
    * was never hidden. */
   revealDelayMs?: number;
+  /** Overrides how long the flip itself takes (default 650ms) — see the
+   * constant above for why this is a prop and not a shared constant. */
+  flipDurationMs?: number;
   /** Plays the win-celebration bounce, delayed by this many ms (queued to
    * start after this tile's own reveal flip has finished). */
   bounceDelayMs?: number;
@@ -62,6 +70,7 @@ export function WordleTile({
   size = "md",
   className,
   revealDelayMs,
+  flipDurationMs = DEFAULT_FLIP_DURATION_MS,
   bounceDelayMs,
   pop,
   active,
@@ -78,6 +87,7 @@ export function WordleTile({
     }
     setRevealed(false);
     setFlipping(false);
+    const flipHalfMs = flipDurationMs / 2;
     const startTimer = setTimeout(() => setFlipping(true), revealDelayMs);
     // Clearing `flipping` the moment the flip finishes (rather than leaving
     // it set) matters once bounceDelayMs is also in play — only one
@@ -87,12 +97,12 @@ export function WordleTile({
     const revealTimer = setTimeout(() => {
       setRevealed(true);
       setFlipping(false);
-    }, revealDelayMs + FLIP_HALF_MS);
+    }, revealDelayMs + flipHalfMs);
     return () => {
       clearTimeout(startTimer);
       clearTimeout(revealTimer);
     };
-  }, [revealDelayMs]);
+  }, [revealDelayMs, flipDurationMs]);
 
   useEffect(() => {
     if (bounceDelayMs === undefined) {
@@ -159,6 +169,7 @@ export function WordleTile({
         active && "!border-dashed !border-foreground",
         className
       )}
+      style={flipping && flipDurationMs !== DEFAULT_FLIP_DURATION_MS ? { animationDuration: `${flipDurationMs}ms` } : undefined}
     >
       {showLetter ? letter : ""}
     </div>

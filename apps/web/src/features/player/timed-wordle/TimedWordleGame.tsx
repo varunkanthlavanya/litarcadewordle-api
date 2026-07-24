@@ -8,6 +8,7 @@ import type {
   TimedWordleTryDto,
 } from "@litarcadewordle/shared-types";
 import { apiClient } from "@/lib/apiClient";
+import { isValidGuessWord } from "@/lib/dictionary";
 import { WordGrid } from "./WordGrid";
 import { Keyboard } from "@/components/shared/Keyboard";
 import { TimerHud } from "./TimerHud";
@@ -175,6 +176,15 @@ export function TimedWordleGame() {
       shakeRow("Not enough letters");
       return;
     }
+    // Instant, zero-network rejection for a not-a-real-word guess — the
+    // server re-checks this too (the authoritative copy), but there's no
+    // reason to make a player wait on a round trip just to find out their
+    // typo isn't a word. Only real, in-dictionary guesses go on to hit
+    // the network at all.
+    if (!isValidGuessWord(guess)) {
+      shakeRow("Invalid word");
+      return;
+    }
 
     submittingRef.current = true;
     setSubmitting(true);
@@ -198,8 +208,11 @@ export function TimedWordleGame() {
       // Same treatment as "Not enough letters" — a shake + hint the player
       // can immediately act on (retype), not a persistent error banner for
       // something that isn't really an error, just an invalid attempt.
+      // Shouldn't normally fire now that isValidGuessWord is checked
+      // client-side first, above — kept as a defensive fallback in case
+      // the two word lists ever drift out of sync.
       if (message === "Not in word list") {
-        shakeRow(message);
+        shakeRow("Invalid word");
       } else {
         setError(message);
       }

@@ -29,6 +29,9 @@ const TIMED_WORDLE_RULES = [
   "Type any real 5-letter word and press Enter to submit a guess.",
   "After each guess, the tiles change color to show how close you were.",
   "You get 6 tries total, with a live countdown clock running the whole time.",
+  "Each try gives you 60 seconds to submit a valid guess.",
+  "Miss that window and you get one 30-second grace period to finish — but it costs you: your next try starts 30 seconds shorter.",
+  "Any time left over from a fast guess doesn't carry to your very next try — it all banks up instead and gets added to your final, 6th try.",
   "If you run out of time or tries, the round ends and the word is revealed.",
 ];
 

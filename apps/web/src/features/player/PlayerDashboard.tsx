@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Lock, Clock } from "lucide-react";
+import { Lock, Clock, HelpCircle } from "lucide-react";
 import type {
   TimedWordleLeaderboardEntry,
   TimedWordleRoundStatusDto,
@@ -14,9 +14,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatHhMmSs, formatMmSs, useCountdown } from "@/hooks/useCountdown";
 import { EntertainmentPartners } from "@/components/shared/EntertainmentPartners";
+import { HowToPlayDialog, type HowToPlayExample } from "@/components/shared/HowToPlayDialog";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 10_000;
+
+const COLOR_EXAMPLES: HowToPlayExample[] = [
+  { word: "CRANE", highlightIndex: 0, color: "GREEN", caption: "is in the word and in the correct spot." },
+  { word: "TRAIN", highlightIndex: 1, color: "YELLOW", caption: "is in the word, but in the wrong spot." },
+  { word: "MOUSE", highlightIndex: 3, color: "GRAY", caption: "is not in the word in any spot." },
+];
+
+const TIMED_WORDLE_RULES = [
+  "Type any real 5-letter word and press Enter to submit a guess.",
+  "After each guess, the tiles change color to show how close you were.",
+  "You get 6 tries total, with a live countdown clock running the whole time.",
+  "If you run out of time or tries, the round ends and the word is revealed.",
+];
+
+const UNWORDLE_RULES = [
+  "Each puzzle shows 4 rows — every row's tile colors are already given, not revealed by guessing.",
+  "Type any real 5-letter word that could produce that exact color pattern.",
+  "Solve a row and the next puzzle loads automatically — no waiting, no clicking through.",
+  "Solve as many puzzles as you can before your own personal clock runs out.",
+];
 
 function timedWordleHeadline(result: NonNullable<TimedWordleRoundStatusDto["result"]>): string {
   switch (result.reason) {
@@ -49,6 +70,8 @@ export function PlayerDashboard() {
   const [uw, setUw] = useState<UnwordleRoundStatusDto | null>(null);
   const [uwLeaderboard, setUwLeaderboard] = useState<UnwordleLeaderboardEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [twHelpOpen, setTwHelpOpen] = useState(false);
+  const [uwHelpOpen, setUwHelpOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +172,15 @@ export function PlayerDashboard() {
               <h2 className="font-bold">Timed Wordle</h2>
               <Badge variant="secondary">Prelims</Badge>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1 h-auto w-fit gap-1 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+              onClick={() => setTwHelpOpen(true)}
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              How to play
+            </Button>
 
             {tw.result ? (
               <div className="mt-3 flex-1 space-y-3">
@@ -222,6 +254,15 @@ export function PlayerDashboard() {
               <h2 className="font-bold">UNWORDLE</h2>
               <Badge variant="secondary">Finals</Badge>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1 h-auto w-fit gap-1 px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+              onClick={() => setUwHelpOpen(true)}
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+              How to play
+            </Button>
 
             {!uw || uw.playerState === "NOT_A_FINALIST" ? (
               <div className="mt-3 flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
@@ -322,6 +363,25 @@ export function PlayerDashboard() {
           columns={["Points", "Puzzles", "Attempts"]}
         />
       )}
+
+      <HowToPlayDialog
+        open={twHelpOpen}
+        onOpenChange={setTwHelpOpen}
+        gameName="Timed Wordle"
+        tagline="Guess the secret 5-letter word in 6 tries before your time runs out."
+        rules={TIMED_WORDLE_RULES}
+        examples={COLOR_EXAMPLES}
+        closingNote="Your rank is based on speed, tries used, and tile score — check the leaderboard once the round closes."
+      />
+      <HowToPlayDialog
+        open={uwHelpOpen}
+        onOpenChange={setUwHelpOpen}
+        gameName="UNWORDLE"
+        tagline="It's Wordle in reverse — the colors are already given. Your job is to find a word that fits."
+        rules={UNWORDLE_RULES}
+        examples={COLOR_EXAMPLES}
+        closingNote="Your rank is based on total points scored across every puzzle you solve — check the leaderboard once the round ends."
+      />
 
       <EntertainmentPartners />
     </div>

@@ -5,9 +5,9 @@ import type { UnwordleRowDto } from "@litarcadewordle/shared-types";
 
 // Matches Timed Wordle's WordGrid.tsx exactly (FLIP_STAGGER_MS/FLIP_DURATION_MS)
 // so both games' tile-flip reveals feel identical: total visible reveal time
-// for a 5-tile row is (5-1)*STAGGER + DURATION = 4*500 + 1100 = 3100ms.
-const REVEAL_STAGGER_MS = 500;
-const FLIP_DURATION_MS = 1100;
+// for a 5-tile row is (5-1)*STAGGER + DURATION = 4*250 + 500 = 1500ms.
+const REVEAL_STAGGER_MS = 250;
+const FLIP_DURATION_MS = 500;
 
 interface UnwordleRowProps {
   row: UnwordleRowDto;

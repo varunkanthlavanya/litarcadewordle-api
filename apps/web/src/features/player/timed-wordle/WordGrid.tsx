@@ -12,17 +12,15 @@ const COLOR_TO_STATE: Record<TileColor, "correct" | "present" | "absent"> = {
   GRAY: "absent",
 };
 
-// Deliberately much slower/more visible than the shared WordleTile default
-// (650ms, still used by UNWORDLE) — FLIP_DURATION_MS is passed to WordleTile
-// explicitly per-tile (see flipDurationMs below) so this only affects Timed
-// Wordle. WordleTile swaps in the true color/letter at the animation's
+// A snappier cascade than plain single-tile defaults, but tuned down from an
+// earlier pass that ran 500ms/1100ms (3.1s to settle a row) and read as
+// sluggish. WordleTile swaps in the true color/letter at the animation's
 // HALFWAY point (rotateX 90deg, edge-on — see WordleTile.tsx) but keeps the
 // CSS animation itself playing all the way to its own end, so the total
 // wall-clock time until the last tile visibly settles is (WORD_LENGTH-1)*
-// STAGGER + DURATION: (5-1)*500 + 1100 = 2000 + 1100 = 3100ms, comfortably
-// over the 2.5s floor asked for.
-const FLIP_STAGGER_MS = 500;
-const FLIP_DURATION_MS = 1100;
+// STAGGER + DURATION: (5-1)*250 + 500 = 1000 + 500 = 1500ms.
+const FLIP_STAGGER_MS = 250;
+const FLIP_DURATION_MS = 500;
 const BOUNCE_STAGGER_MS = 80;
 
 interface WordGridProps {

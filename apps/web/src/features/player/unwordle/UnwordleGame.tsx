@@ -40,10 +40,11 @@ const HEARTBEAT_MS = 15_000;
 // checkmark bounce — see UnwordleRow.tsx) gets to play before we act on
 // ADVANCED/BANK_EXHAUSTED/ROUND_ENDED. Must be >= the row's own reveal time
 // — REVEAL_STAGGER_MS/FLIP_DURATION_MS in UnwordleRow.tsx give a 5-tile row
-// (5-1)*500 + 1100/2 = 2550ms to fully reveal — otherwise clearing
-// `justSolved` early would jump-cut mid-flip tiles straight to their final
-// state instead of letting the animation play out.
-const FLOURISH_MS = 2600;
+// (5-1)*500 + 1100 = 3100ms to fully reveal (each tile's flip now plays its
+// whole CSS animation, not just the first half — see WordleTile.tsx) —
+// otherwise clearing `justSolved` early would jump-cut mid-flip tiles
+// straight to their final state instead of letting the animation play out.
+const FLOURISH_MS = 3200;
 // Board fade duration either side of an auto-advance swap — long enough to
 // read as a deliberate transition, short enough not to feel sluggish.
 const FADE_MS = 200;

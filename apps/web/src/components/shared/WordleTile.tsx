@@ -89,15 +89,16 @@ export function WordleTile({
     setFlipping(false);
     const flipHalfMs = flipDurationMs / 2;
     const startTimer = setTimeout(() => setFlipping(true), revealDelayMs);
-    // Clearing `flipping` the moment the flip finishes (rather than leaving
-    // it set) matters once bounceDelayMs is also in play — only one
-    // animate-* class should ever be active at a time, since both set the
-    // same CSS `animation` property and Tailwind's utility ordering doesn't
-    // reliably follow JSX className order.
-    const revealTimer = setTimeout(() => {
-      setRevealed(true);
-      setFlipping(false);
-    }, revealDelayMs + flipHalfMs);
+    // Swap the face at the animation's midpoint (rotateX 90deg — edge-on and
+    // invisible) but leave `flipping` (and its CSS animation) running. An
+    // earlier version cleared `flipping` here too, which killed the "tile-flip"
+    // keyframe mid-flight and snapped the transform straight from rotateX(90)
+    // to identity with no motion at all — the tile looked like it rotated
+    // halfway down then instantly popped to its revealed face, rather than
+    // completing a smooth flip. The class now only comes off via
+    // onAnimationEnd below, once the animation has actually played all the
+    // way back to rotateX(0deg).
+    const revealTimer = setTimeout(() => setRevealed(true), revealDelayMs + flipHalfMs);
     return () => {
       clearTimeout(startTimer);
       clearTimeout(revealTimer);
@@ -170,6 +171,11 @@ export function WordleTile({
         className
       )}
       style={flipping && flipDurationMs !== DEFAULT_FLIP_DURATION_MS ? { animationDuration: `${flipDurationMs}ms` } : undefined}
+      onAnimationEnd={(e) => {
+        // Only react to the flip animation ending, not "tile-bounce" or
+        // "tile-pop" — all three can fire this event on the same element.
+        if (e.animationName === "tile-flip") setFlipping(false);
+      }}
     >
       {showLetter ? letter : ""}
     </div>

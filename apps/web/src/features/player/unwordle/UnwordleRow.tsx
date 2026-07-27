@@ -5,7 +5,7 @@ import type { UnwordleRowDto } from "@litarcadewordle/shared-types";
 
 // Matches Timed Wordle's WordGrid.tsx exactly (FLIP_STAGGER_MS/FLIP_DURATION_MS)
 // so both games' tile-flip reveals feel identical: total visible reveal time
-// for a 5-tile row is (5-1)*STAGGER + DURATION/2 = 4*500 + 550 = 2550ms.
+// for a 5-tile row is (5-1)*STAGGER + DURATION = 4*500 + 1100 = 3100ms.
 const REVEAL_STAGGER_MS = 500;
 const FLIP_DURATION_MS = 1100;
 
@@ -69,7 +69,12 @@ export function UnwordleRow({ row, selected, onSelect, currentGuess, justSolved,
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-none bg-success text-success-foreground",
             justSolved && "animate-tile-bounce"
           )}
-          style={justSolved ? { animationDelay: `${row.pattern.length * REVEAL_STAGGER_MS}ms` } : undefined}
+          // Matches WordGrid.tsx's own bounce-delay formula (WORD_LENGTH *
+          // FLIP_STAGGER_MS + FLIP_DURATION_MS) — a beat after the last
+          // tile's flip actually settles, not mid-flight.
+          style={
+            justSolved ? { animationDelay: `${row.pattern.length * REVEAL_STAGGER_MS + FLIP_DURATION_MS}ms` } : undefined
+          }
         >
           <Check className="h-3.5 w-3.5" />
         </span>

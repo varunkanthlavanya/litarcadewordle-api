@@ -18,6 +18,15 @@ export function Home() {
     <div className="wl-player-shell font-serif flex min-h-screen flex-col items-center justify-center bg-[oklch(0.94_0.012_75)] px-5 py-12">
       <div className="w-full max-w-sm rounded-none border border-border bg-background px-8 py-10 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.06)]">
         <div className="flex w-full flex-col items-center">
+          <div className="mb-5 flex w-full flex-col items-center gap-2.5 border-b border-border pb-5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Organized by</p>
+            <div className="flex items-center justify-center gap-5">
+              <img src="/partners/hari-shree-vidyalayam.svg" alt="Chettinad Hari Shree Vidyalayam" className="h-9 w-auto object-contain" />
+              <div className="h-8 w-px bg-border" />
+              <img src="/partners/kyn.png" alt="kyn" className="h-9 w-9 object-contain" />
+            </div>
+          </div>
+
           <div className="mb-2.5 flex gap-[5px]">
             {WORDMARK_TILES.map(({ letter, color }) => (
               <div
